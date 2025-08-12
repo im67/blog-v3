@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en-US" dir="ltr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Vue.js源码系列(二)：mount与第一次渲染 | im6767‘s blog</title>
+    <meta name="description" content="im6767's blog project">
+    <meta name="generator" content="VitePress v1.6.3">
+    <link rel="preload stylesheet" href="/assets/style.CrVbxM17.css" as="style">
+    <link rel="preload stylesheet" href="/vp-icons.css" as="style">
+    
+    <script type="module" src="/assets/app.BgWyoZgr.js"></script>
+    <link rel="modulepreload" href="/assets/content_blog_2020五月初青岛游·见·闻.md.BJ2NW9aG.js">
+    <link rel="modulepreload" href="/assets/chunks/framework.DuhuGyQx.js">
+    <link rel="modulepreload" href="/assets/content_blog_Vue.js源码系列(二)：mount与第一次渲染.md.BDYO3f4C.lean.js">
+    <script id="check-dark-mode">(()=>{const e=localStorage.getItem("vitepress-theme-appearance")||"auto",a=window.matchMedia("(prefers-color-scheme: dark)").matches;(!e||e==="auto"?a:e==="dark")&&document.documentElement.classList.add("dark")})();</script>
+    <script id="check-mac-os">document.documentElement.classList.toggle("mac",/Mac|iPhone|iPod|iPad/i.test(navigator.platform));</script>
+  </head>
+  <body>
+    <div id="app"><div class="w-screen h-screen flex"><div class="hidden lg:block"><!--[--><div class="relative flex flex-col items-center justify-between lg:h-screen box-border border-r shadow border-gray-300 z-[3] bg-gray-100"><div class="p-8"><h2 class="transform lg:-rotate-90 tracking-widest">七</h2><h2 class="transform lg:-rotate-90 tracking-widest">六</h2></div><footer class="fixed flex flex-col justify-center items-center origin-left transform -rotate-90 w-48 bottom-4 text-stone-500 text-sm underline-offset-4" style="left:0px;"><span>@author: im6767</span><a class="underline" href="https://beian.miit.gov.cn/#/Integrated/index"><div>陇ICP备2023000396号</div></a></footer></div><!--]--></div><div class="flex flex-col grow overflow-hidden"><!--[--><div class="flex items-center justify-between header-menu font-normal z-3" data-v-e638f91e><div class="grow-1 flex justify-around border-b-[1px] border-stone-300" data-v-e638f91e><!--[--><h3 class="cursor-pointer menu-item relative" data-v-e638f91e><a href="/" class="inline-block py-3" data-v-e638f91e>首页</a></h3><h3 class="cursor-pointer menu-item relative" data-v-e638f91e><a href="/content/" class="inline-block py-3" data-v-e638f91e>博客</a></h3><!--]--></div></div><!--]--><!--[--><div class="flex grow overflow-auto" id="main"><div class="shrink-0 grow w-3/4"><div class="flex items-center gap-1 mx-6 my-6"><h2 class="w-fit underline underline-offset-8">Vue.js源码系列(二)：mount与第一次渲染</h2></div><div style="position:relative;" class="blog-content"><div><h2 id="前言" tabindex="-1">前言 <a class="header-anchor" href="#前言" aria-label="Permalink to &quot;前言&quot;">​</a></h2><p>最近因为一些事情，心情不怎么美丽，又开始思考一个问题：婚姻究竟为我们带来了什么？比起这些偏社会学的哲学思考，代码确实友好的多，因为它是有答案的。也希望有一天我也能得到上面问题的我自己的答案吧。</p><p>工作上使用公司的脚手架，感觉不太好用，半成品，找个机会重新做一下吧。</p><p>本文章节将从mount开始，理解在createApp得到app实例之后，如何进行挂载。</p><h2 id="mount开始的流程" tabindex="-1">mount开始的流程 <a class="header-anchor" href="#mount开始的流程" aria-label="Permalink to &quot;mount开始的流程&quot;">​</a></h2><div class="language-typescript vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">typescript</span><pre><code class="hljs language-typescript">      <span class="hljs-title function_">mount</span>(
+        <span class="hljs-attr">rootContainer</span>: <span class="hljs-title class_">HostElement</span>,
+        <span class="hljs-attr">isHydrate</span>?: <span class="hljs-built_in">boolean</span>,
+        <span class="hljs-attr">isSVG</span>?: <span class="hljs-built_in">boolean</span>
+      ): <span class="hljs-built_in">any</span> {
+        <span class="hljs-keyword">if</span> (!isMounted) {
+          <span class="hljs-comment">// #5571</span>
+          <span class="hljs-keyword">if</span> (__DEV__ &amp;&amp; (rootContainer <span class="hljs-keyword">as</span> <span class="hljs-built_in">any</span>).<span class="hljs-property">__vue_app__</span>) {
+            <span class="hljs-title function_">warn</span>(
+              <span class="hljs-string">`There is already an app instance mounted on the host container.\n`</span> +
+                <span class="hljs-string">` If you want to mount another app on the same host container,`</span> +
+                <span class="hljs-string">` you need to unmount the previous app by calling \`app.unmount()\` first.`</span>
+            )
+          }
+          
+          <span class="hljs-keyword">const</span> vnode = <span class="hljs-title function_">createVNode</span>(
+            rootComponent <span class="hljs-keyword">as</span> <span class="hljs-title class_">ConcreteComponent</span>,
+            rootProps
+          )
+          <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">&quot;1. 执行挂载时, 根据传入的根组件对象调用createVNode生成虚拟dom的虚拟node, createVNode&quot;</span>)
+          <span class="hljs-comment">// store app context on the root VNode.</span>
+          <span class="hljs-comment">// this will be set on the root instance on initial mount.</span>
+          vnode.<span class="hljs-property">appContext</span> = context
+
+          <span class="hljs-comment">// HMR root reload</span>
+          <span class="hljs-keyword">if</span> (__DEV__) {
+            context.<span class="hljs-property">reload</span> = <span class="hljs-function">() =&gt;</span> {
+              <span class="hljs-title function_">render</span>(<span class="hljs-title function_">cloneVNode</span>(vnode), rootContainer, isSVG)
+            }
+          }
+
+          <span class="hljs-keyword">if</span> (isHydrate &amp;&amp; hydrate) {
+            <span class="hljs-title function_">hydrate</span>(vnode <span class="hljs-keyword">as</span> <span class="hljs-title class_">VNode</span>&lt;<span class="hljs-title class_">Node</span>, <span class="hljs-title class_">Element</span>&gt;, rootContainer <span class="hljs-keyword">as</span> <span class="hljs-built_in">any</span>)
+          } <span class="hljs-keyword">else</span> {
+            <span class="hljs-title function_">render</span>(vnode, rootContainer, isSVG)
+          }
+          isMounted = <span class="hljs-literal">true</span>
+          app.<span class="hljs-property">_container</span> = rootContainer
+          <span class="hljs-comment">// for devtools and telemetry</span>
+          ;(rootContainer <span class="hljs-keyword">as</span> <span class="hljs-built_in">any</span>).<span class="hljs-property">__vue_app__</span> = app
+
+          <span class="hljs-keyword">if</span> (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
+            app.<span class="hljs-property">_instance</span> = vnode.<span class="hljs-property">component</span>
+            <span class="hljs-title function_">devtoolsInitApp</span>(app, version)
+          }
+
+          <span class="hljs-keyword">return</span> <span class="hljs-title function_">getExposeProxy</span>(vnode.<span class="hljs-property">component</span>!) || vnode.<span class="hljs-property">component</span>!.<span class="hljs-property">proxy</span>
+        } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (__DEV__) {
+          <span class="hljs-title function_">warn</span>(
+            <span class="hljs-string">`App has already been mounted.\n`</span> +
+              <span class="hljs-string">`If you want to remount the same app, move your app creation logic `</span> +
+              <span class="hljs-string">`into a factory function and create fresh app instances for each `</span> +
+              <span class="hljs-string">`mount - e.g. \`const createMyApp = () =&gt; createApp(App)\``</span>
+          )
+        }
+      },
+</code></pre></div><p>此处就是mount的方法定义，首先调用createVNode获取vnode，rootContainer就是createApp时的参数，rootProps是根节点的props，一般使用的过程中，这个值为null。然后将context绑定在根节点上，然后就要开始调用渲染函数，完毕之后将isMounted变量置为true，保存rootContainer到实例的_container属性上，返回vnode.component的代理，结束。</p><p>从上面的代码中可以看出，mount内部最核心的方法就是render函数，也就是渲染函数。</p><h2 id="核心-render" tabindex="-1">核心：render <a class="header-anchor" href="#核心-render" aria-label="Permalink to &quot;核心：render&quot;">​</a></h2><div class="language-typescript vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">typescript</span><pre><code class="hljs language-typescript">  <span class="hljs-keyword">const</span> <span class="hljs-attr">render</span>: <span class="hljs-title class_">RootRenderFunction</span> = <span class="hljs-function">(<span class="hljs-params">vnode, container, isSVG</span>) =&gt;</span> {
+    <span class="hljs-keyword">if</span> (vnode == <span class="hljs-literal">null</span>) {
+      <span class="hljs-keyword">if</span> (container.<span class="hljs-property">_vnode</span>) {
+        <span class="hljs-title function_">unmount</span>(container.<span class="hljs-property">_vnode</span>, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>, <span class="hljs-literal">true</span>)
+      }
+    } <span class="hljs-keyword">else</span> {
+      <span class="hljs-title function_">patch</span>(container.<span class="hljs-property">_vnode</span> || <span class="hljs-literal">null</span>, vnode, container, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>, isSVG)
+    }
+    <span class="hljs-title function_">flushPreFlushCbs</span>()
+    <span class="hljs-title function_">flushPostFlushCbs</span>()
+    container.<span class="hljs-property">_vnode</span> = vnode
+  }
+</code></pre></div><p>其实这里的这个render函数非常简单，可以将其理解为一个分发器，根据条件不同来决定进行unmount操作或者patch操作。</p><p>在执行完毕之后，调用flush操作，执行回调。如果是初次渲染，则肯定会进入到patch方法中，因此我们只需要关注patch部分的代码。</p><h3 id="更进一步的核心-patch" tabindex="-1">更进一步的核心：patch <a class="header-anchor" href="#更进一步的核心-patch" aria-label="Permalink to &quot;更进一步的核心：patch&quot;">​</a></h3><div class="language-typescript vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">typescript</span><pre><code class="hljs language-typescript"><span class="hljs-comment">// @src/packages/runtime-core/src/renderer.ts</span>
+  
+<span class="hljs-keyword">const</span> <span class="hljs-attr">patch</span>: <span class="hljs-title class_">PatchFn</span> = <span class="hljs-function">(<span class="hljs-params">
+    n1,
+    n2,
+    container,
+    anchor = <span class="hljs-literal">null</span>,
+    parentComponent = <span class="hljs-literal">null</span>,
+    parentSuspense = <span class="hljs-literal">null</span>,
+    isSVG = <span class="hljs-literal">false</span>,
+    slotScopeIds = <span class="hljs-literal">null</span>,
+    optimized = __DEV__ &amp;&amp; isHmrUpdating ? <span class="hljs-literal">false</span> : !!n2.dynamicChildren
+  </span>) =&gt;</span> {
+    <span class="hljs-keyword">if</span> (n1 === n2) {
+      <span class="hljs-keyword">return</span>
+    }
+
+    <span class="hljs-comment">// patching &amp; not same type, unmount old tree</span>
+    <span class="hljs-keyword">if</span> (n1 &amp;&amp; !<span class="hljs-title function_">isSameVNodeType</span>(n1, n2)) {
+      anchor = <span class="hljs-title function_">getNextHostNode</span>(n1)
+      <span class="hljs-title function_">unmount</span>(n1, parentComponent, parentSuspense, <span class="hljs-literal">true</span>)
+      n1 = <span class="hljs-literal">null</span>
+    }
+
+    <span class="hljs-keyword">if</span> (n2.<span class="hljs-property">patchFlag</span> === <span class="hljs-title class_">PatchFlags</span>.<span class="hljs-property">BAIL</span>) {
+      optimized = <span class="hljs-literal">false</span>
+      n2.<span class="hljs-property">dynamicChildren</span> = <span class="hljs-literal">null</span>
+    }
+
+    <span class="hljs-keyword">const</span> { <span class="hljs-keyword">type</span>, ref, shapeFlag } = n2
+    <span class="hljs-keyword">switch</span> (<span class="hljs-keyword">type</span>) {
+      <span class="hljs-keyword">case</span> <span class="hljs-title class_">Text</span>:
+        <span class="hljs-title function_">processText</span>(n1, n2, container, anchor)
+        <span class="hljs-keyword">break</span>
+      <span class="hljs-keyword">case</span> <span class="hljs-title class_">Comment</span>:
+        <span class="hljs-title function_">processCommentNode</span>(n1, n2, container, anchor)
+        <span class="hljs-keyword">break</span>
+      <span class="hljs-keyword">case</span> <span class="hljs-title class_">Static</span>:
+        <span class="hljs-keyword">if</span> (n1 == <span class="hljs-literal">null</span>) {
+          <span class="hljs-title function_">mountStaticNode</span>(n2, container, anchor, isSVG)
+        } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (__DEV__) {
+          <span class="hljs-title function_">patchStaticNode</span>(n1, n2, container, isSVG)
+        }
+        <span class="hljs-keyword">break</span>
+      <span class="hljs-keyword">case</span> <span class="hljs-title class_">Fragment</span>:
+        <span class="hljs-title function_">processFragment</span>(
+          n1,
+          n2,
+          container,
+          anchor,
+          parentComponent,
+          parentSuspense,
+          isSVG,
+          slotScopeIds,
+          optimized
+        )
+        <span class="hljs-keyword">break</span>
+      <span class="hljs-attr">default</span>:
+        <span class="hljs-keyword">if</span> (shapeFlag &amp; <span class="hljs-title class_">ShapeFlags</span>.<span class="hljs-property">ELEMENT</span>) {
+          <span class="hljs-title function_">processElement</span>(
+            n1,
+            n2,
+            container,
+            anchor,
+            parentComponent,
+            parentSuspense,
+            isSVG,
+            slotScopeIds,
+            optimized
+          )
+        } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (shapeFlag &amp; <span class="hljs-title class_">ShapeFlags</span>.<span class="hljs-property">COMPONENT</span>) {
+          <span class="hljs-title function_">processComponent</span>(
+            n1,
+            n2,
+            container,
+            anchor,
+            parentComponent,
+            parentSuspense,
+            isSVG,
+            slotScopeIds,
+            optimized
+          )
+        } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (shapeFlag &amp; <span class="hljs-title class_">ShapeFlags</span>.<span class="hljs-property">TELEPORT</span>) {
+          ;(<span class="hljs-keyword">type</span> <span class="hljs-keyword">as</span> <span class="hljs-keyword">typeof</span> <span class="hljs-title class_">TeleportImpl</span>).<span class="hljs-title function_">process</span>(
+            n1 <span class="hljs-keyword">as</span> <span class="hljs-title class_">TeleportVNode</span>,
+            n2 <span class="hljs-keyword">as</span> <span class="hljs-title class_">TeleportVNode</span>,
+            container,
+            anchor,
+            parentComponent,
+            parentSuspense,
+            isSVG,
+            slotScopeIds,
+            optimized,
+            internals
+          )
+        } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (__FEATURE_SUSPENSE__ &amp;&amp; shapeFlag &amp; <span class="hljs-title class_">ShapeFlags</span>.<span class="hljs-property">SUSPENSE</span>) {
+          ;(<span class="hljs-keyword">type</span> <span class="hljs-keyword">as</span> <span class="hljs-keyword">typeof</span> <span class="hljs-title class_">SuspenseImpl</span>).<span class="hljs-title function_">process</span>(
+            n1,
+            n2,
+            container,
+            anchor,
+            parentComponent,
+            parentSuspense,
+            isSVG,
+            slotScopeIds,
+            optimized,
+            internals
+          )
+        } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (__DEV__) {
+          <span class="hljs-title function_">warn</span>(<span class="hljs-string">&#39;Invalid VNode type:&#39;</span>, <span class="hljs-keyword">type</span>, <span class="hljs-string">`(<span class="hljs-subst">${<span class="hljs-keyword">typeof</span> <span class="hljs-keyword">type</span>}</span>)`</span>)
+        }
+    }
+
+    <span class="hljs-comment">// set ref</span>
+    <span class="hljs-keyword">if</span> (ref != <span class="hljs-literal">null</span> &amp;&amp; parentComponent) {
+      <span class="hljs-title function_">setRef</span>(ref, n1 &amp;&amp; n1.<span class="hljs-property">ref</span>, parentSuspense, n2 || n1, !n2)
+    }
+  }
+</code></pre></div><p>从patch开始，我们就要和虚拟dom的diff内容挂钩了，不过在这之前，不妨先通过例子进入到patch内部了解一下。在之前_example.html中，添加新的测试用例文件，JS如下。</p><div class="language-javascript vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">javascript</span><pre><code class="hljs language-javascript"><span class="hljs-comment">//template</span>
+&lt;div id=<span class="hljs-string">&quot;root&quot;</span>&gt;
+  <span class="language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">v-for</span>=<span class="hljs-string">&quot;item in list&quot;</span>&gt;</span>
+    
+  <span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span></span>
+&lt;/div&gt;
+
+<span class="hljs-comment">//list.js</span>
+<span class="hljs-title function_">createApp</span>({
+  <span class="hljs-title function_">setup</span>(<span class="hljs-params"></span>) {
+    <span class="hljs-keyword">const</span> list = [<span class="hljs-number">1</span>, <span class="hljs-number">2</span>, <span class="hljs-number">3</span>, <span class="hljs-number">4</span>, <span class="hljs-number">5</span>, <span class="hljs-number">6</span>, <span class="hljs-number">7</span>]
+    <span class="hljs-keyword">return</span> {
+      list
+    }
+  }
+}).<span class="hljs-title function_">mount</span>(<span class="hljs-string">&#39;#root&#39;</span>)
+</code></pre></div><p>其在patch中的流程如下：</p><ol><li>首先n1和n2两个节点进行判断，因为我们是初次渲染，所以n1实际上为空，不会命中n1和n2同时存在的节点处理。</li><li>如果n2.patchFlag等于PatchFlag.BAIL(值为-2)时，会推出压缩优化模式。</li><li>判断n2的节点类型type字段，此时我们的根节点内容会命中到default中，然后节点的shapeFlags和ShapeFlags.COMPONENT相同，进入到processComponent方法中进行处理。</li><li>processComponent中进行节点判断，其中涉及到了<code>&lt;keep-alive /&gt;</code>的处理，但是这不在我们的讨论范围之内。因为节点是第一次渲染，所以命中n1为null的情况，并且非KEPT_ALIVE，调用执行mountComponent方法。</li><li>mountComponent中首先要建立一个实例来管理组件，他最终由createComponentInstance方法创建，如下</li></ol><div class="language-javascript vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">javascript</span><pre><code class="hljs language-javascript"><span class="hljs-keyword">export</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">createComponentInstance</span>(<span class="hljs-params">
+  vnode: VNode,
+  parent: ComponentInternalInstance | <span class="hljs-literal">null</span>,
+  suspense: SuspenseBoundary | <span class="hljs-literal">null</span>
+</span>) {
+  <span class="hljs-keyword">const</span> type = vnode.<span class="hljs-property">type</span> <span class="hljs-keyword">as</span> <span class="hljs-title class_">ConcreteComponent</span>
+  <span class="hljs-comment">// inherit parent app context - or - if root, adopt from root vnode</span>
+  <span class="hljs-keyword">const</span> appContext =
+    (parent ? parent.<span class="hljs-property">appContext</span> : vnode.<span class="hljs-property">appContext</span>) || emptyAppContext
+
+  <span class="hljs-keyword">const</span> <span class="hljs-attr">instance</span>: <span class="hljs-title class_">ComponentInternalInstance</span> = {
+    <span class="hljs-attr">uid</span>: uid++,
+    vnode,
+    type,
+    parent,
+    appContext,
+    <span class="hljs-attr">root</span>: <span class="hljs-literal">null</span>!, <span class="hljs-comment">// to be immediately set</span>
+    <span class="hljs-attr">next</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">subTree</span>: <span class="hljs-literal">null</span>!, <span class="hljs-comment">// will be set synchronously right after creation</span>
+    <span class="hljs-attr">effect</span>: <span class="hljs-literal">null</span>!,
+    <span class="hljs-attr">update</span>: <span class="hljs-literal">null</span>!, <span class="hljs-comment">// will be set synchronously right after creation</span>
+    <span class="hljs-attr">scope</span>: <span class="hljs-keyword">new</span> <span class="hljs-title class_">EffectScope</span>(<span class="hljs-literal">true</span> <span class="hljs-comment">/* detached */</span>),
+    <span class="hljs-attr">render</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">proxy</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">exposed</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">exposeProxy</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">withProxy</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">provides</span>: parent ? parent.<span class="hljs-property">provides</span> : <span class="hljs-title class_">Object</span>.<span class="hljs-title function_">create</span>(appContext.<span class="hljs-property">provides</span>),
+    <span class="hljs-attr">accessCache</span>: <span class="hljs-literal">null</span>!,
+    <span class="hljs-attr">renderCache</span>: [],
+
+    <span class="hljs-comment">// local resolved assets</span>
+    <span class="hljs-attr">components</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">directives</span>: <span class="hljs-literal">null</span>,
+
+    <span class="hljs-comment">// resolved props and emits options</span>
+    <span class="hljs-attr">propsOptions</span>: <span class="hljs-title function_">normalizePropsOptions</span>(type, appContext),
+    <span class="hljs-attr">emitsOptions</span>: <span class="hljs-title function_">normalizeEmitsOptions</span>(type, appContext),
+
+    <span class="hljs-comment">// emit</span>
+    <span class="hljs-attr">emit</span>: <span class="hljs-literal">null</span>!, <span class="hljs-comment">// to be set immediately</span>
+    <span class="hljs-attr">emitted</span>: <span class="hljs-literal">null</span>,
+
+    <span class="hljs-comment">// props default value</span>
+    <span class="hljs-attr">propsDefaults</span>: <span class="hljs-variable constant_">EMPTY_OBJ</span>,
+
+    <span class="hljs-comment">// inheritAttrs</span>
+    <span class="hljs-attr">inheritAttrs</span>: type.<span class="hljs-property">inheritAttrs</span>,
+
+    <span class="hljs-comment">// state</span>
+    <span class="hljs-attr">ctx</span>: <span class="hljs-variable constant_">EMPTY_OBJ</span>,
+    <span class="hljs-attr">data</span>: <span class="hljs-variable constant_">EMPTY_OBJ</span>,
+    <span class="hljs-attr">props</span>: <span class="hljs-variable constant_">EMPTY_OBJ</span>,
+    <span class="hljs-attr">attrs</span>: <span class="hljs-variable constant_">EMPTY_OBJ</span>,
+    <span class="hljs-attr">slots</span>: <span class="hljs-variable constant_">EMPTY_OBJ</span>,
+    <span class="hljs-attr">refs</span>: <span class="hljs-variable constant_">EMPTY_OBJ</span>,
+    <span class="hljs-attr">setupState</span>: <span class="hljs-variable constant_">EMPTY_OBJ</span>,
+    <span class="hljs-attr">setupContext</span>: <span class="hljs-literal">null</span>,
+
+    <span class="hljs-comment">// suspense related</span>
+    suspense,
+    <span class="hljs-attr">suspenseId</span>: suspense ? suspense.<span class="hljs-property">pendingId</span> : <span class="hljs-number">0</span>,
+    <span class="hljs-attr">asyncDep</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">asyncResolved</span>: <span class="hljs-literal">false</span>,
+
+    <span class="hljs-comment">// lifecycle hooks</span>
+    <span class="hljs-comment">// not using enums here because it results in computed properties</span>
+    <span class="hljs-attr">isMounted</span>: <span class="hljs-literal">false</span>,
+    <span class="hljs-attr">isUnmounted</span>: <span class="hljs-literal">false</span>,
+    <span class="hljs-attr">isDeactivated</span>: <span class="hljs-literal">false</span>,
+    <span class="hljs-attr">bc</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">c</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">bm</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">m</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">bu</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">u</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">um</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">bum</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">da</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">a</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">rtg</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">rtc</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">ec</span>: <span class="hljs-literal">null</span>,
+    <span class="hljs-attr">sp</span>: <span class="hljs-literal">null</span>
+  }
+  <span class="hljs-keyword">if</span> (__DEV__) {
+    instance.<span class="hljs-property">ctx</span> = <span class="hljs-title function_">createDevRenderContext</span>(instance)
+  } <span class="hljs-keyword">else</span> {
+    instance.<span class="hljs-property">ctx</span> = { <span class="hljs-attr">_</span>: instance }
+  }
+  instance.<span class="hljs-property">root</span> = parent ? parent.<span class="hljs-property">root</span> : instance
+  instance.<span class="hljs-property">emit</span> = emit.<span class="hljs-title function_">bind</span>(<span class="hljs-literal">null</span>, instance)
+
+  <span class="hljs-comment">// apply custom element special handling</span>
+  <span class="hljs-keyword">if</span> (vnode.<span class="hljs-property">ce</span>) {
+    vnode.<span class="hljs-title function_">ce</span>(instance)
+  }
+
+  <span class="hljs-keyword">return</span> instance
+}
+</code></pre></div><p>实例管理组件所需要的所有属性和方法，因为我们的根组件没有父组件，所以实例的root就是自己，然后将这个实例对象返回即可。接着经过一些dev环境下可能需要的性能测量API配置之外，就要进入到setupComponent方法中初始化props和slots，然后最终调用到setupRenderEffect方法。</p><ol start="6"><li>在上一个步骤中，提到的一个关键的初始化方法，即setupComponent，初始化props和slots，当我们以根节点传入时，这两个对象都是空，具体的组件setup部分在后续会再次进行介绍。</li><li>另一个关键的方法就是setupRenderEffect方法，这是一个核心方法，是实现响应式的核心部分。方法内部定义了一个名为componentUpdateFn的函数，会作为参数传递给响应式的核心方法，代码如下：</li></ol><div class="language-javascript vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">javascript</span><pre><code class="hljs language-javascript"> <span class="hljs-comment">// create reactive effect for rendering</span>
+    <span class="hljs-keyword">const</span> effect = (instance.<span class="hljs-property">effect</span> = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ReactiveEffect</span>(
+      componentUpdateFn,
+      <span class="hljs-function">() =&gt;</span> <span class="hljs-title function_">queueJob</span>(update),
+      instance.<span class="hljs-property">scope</span> <span class="hljs-comment">// track it in component&#39;s effect scope</span>
+    ))
+</code></pre></div><p>关于响应式部分的内容，我们会有单独的章节进行处理，这里先暂时按下不表，先来看看componentUpdateFn这个方法。</p><ol start="8"><li>componentUpdateFn中有两个分支，如果组件没有挂载，则走渲染逻辑，如果组件挂载了，则走更新逻辑。因为到目前为止我们是第一次渲染，所以逻辑部分是渲染。源码如下：</li></ol><div class="language-typescript vp-adaptive-theme"><button title="Copy Code" class="copy"></button><span class="lang">typescript</span><pre><code class="hljs language-typescript"><span class="hljs-keyword">const</span> <span class="hljs-title function_">componentUpdateFn</span> = (<span class="hljs-params"></span>) =&gt; {
+  <span class="hljs-keyword">if</span> (!instance.<span class="hljs-property">isMounted</span>) {
+    <span class="hljs-keyword">let</span> <span class="hljs-attr">vnodeHook</span>: <span class="hljs-title class_">VNodeHook</span> | <span class="hljs-literal">null</span> | <span class="hljs-literal">undefined</span>
+    <span class="hljs-keyword">const</span> { el, props } = initialVNode
+    <span class="hljs-keyword">const</span> { bm, m, parent } = instance
+    <span class="hljs-keyword">const</span> isAsyncWrapperVNode = <span class="hljs-title function_">isAsyncWrapper</span>(initialVNode)
+
+    <span class="hljs-title function_">toggleRecurse</span>(instance, <span class="hljs-literal">false</span>)
+    <span class="hljs-comment">// beforeMount hook</span>
+    <span class="hljs-keyword">if</span> (bm) {
+      <span class="hljs-title function_">invokeArrayFns</span>(bm)
+    }
+    <span class="hljs-comment">// onVnodeBeforeMount</span>
+    <span class="hljs-keyword">if</span> (
+      !isAsyncWrapperVNode &amp;&amp;
+      (vnodeHook = props &amp;&amp; props.<span class="hljs-property">onVnodeBeforeMount</span>)
+    ) {
+      <span class="hljs-title function_">invokeVNodeHook</span>(vnodeHook, parent, initialVNode)
+    }
+    <span class="hljs-keyword">if</span> (
+      __COMPAT__ &amp;&amp;
+      <span class="hljs-title function_">isCompatEnabled</span>(<span class="hljs-title class_">DeprecationTypes</span>.<span class="hljs-property">INSTANCE_EVENT_HOOKS</span>, instance)
+    ) {
+      instance.<span class="hljs-title function_">emit</span>(<span class="hljs-string">&#39;hook:beforeMount&#39;</span>)
+    }
+    <span class="hljs-title function_">toggleRecurse</span>(instance, <span class="hljs-literal">true</span>)
+
+    <span class="hljs-keyword">if</span> (el &amp;&amp; hydrateNode) {
+      <span class="hljs-comment">// vnode has adopted host node - perform hydration instead of mount.</span>
+      <span class="hljs-keyword">const</span> <span class="hljs-title function_">hydrateSubTree</span> = (<span class="hljs-params"></span>) =&gt; {
+        <span class="hljs-keyword">if</span> (__DEV__) {
+          <span class="hljs-title function_">startMeasure</span>(instance, <span class="hljs-string">`render`</span>)
+        }
+        instance.<span class="hljs-property">subTree</span> = <span class="hljs-title function_">renderComponentRoot</span>(instance)
+        <span class="hljs-keyword">if</span> (__DEV__) {
+          <span class="hljs-title function_">endMeasure</span>(instance, <span class="hljs-string">`render`</span>)
+        }
+        <span class="hljs-keyword">if</span> (__DEV__) {
+          <span class="hljs-title function_">startMeasure</span>(instance, <span class="hljs-string">`hydrate`</span>)
+        }
+        hydrateNode!(
+          el <span class="hljs-keyword">as</span> <span class="hljs-title class_">Node</span>,
+          instance.<span class="hljs-property">subTree</span>,
+          instance,
+          parentSuspense,
+          <span class="hljs-literal">null</span>
+        )
+        <span class="hljs-keyword">if</span> (__DEV__) {
+          <span class="hljs-title function_">endMeasure</span>(instance, <span class="hljs-string">`hydrate`</span>)
+        }
+      }
+
+      <span class="hljs-keyword">if</span> (isAsyncWrapperVNode) {
+        ;(initialVNode.<span class="hljs-property">type</span> <span class="hljs-keyword">as</span> <span class="hljs-title class_">ComponentOptions</span>).<span class="hljs-property">__asyncLoader</span>!().<span class="hljs-title function_">then</span>(
+          <span class="hljs-comment">// note: we are moving the render call into an async callback,</span>
+          <span class="hljs-comment">// which means it won&#39;t track dependencies - but it&#39;s ok because</span>
+          <span class="hljs-comment">// a server-rendered async wrapper is already in resolved state</span>
+          <span class="hljs-comment">// and it will never need to change.</span>
+          <span class="hljs-function">() =&gt;</span> !instance.<span class="hljs-property">isUnmounted</span> &amp;&amp; <span class="hljs-title function_">hydrateSubTree</span>()
+        )
+      } <span class="hljs-keyword">else</span> {
+        <span class="hljs-title function_">hydrateSubTree</span>()
+      }
+    } <span class="hljs-keyword">else</span> {
+      <span class="hljs-keyword">if</span> (__DEV__) {
+        <span class="hljs-title function_">startMeasure</span>(instance, <span class="hljs-string">`render`</span>)
+      }
+      <span class="hljs-keyword">const</span> subTree = (instance.<span class="hljs-property">subTree</span> = <span class="hljs-title function_">renderComponentRoot</span>(instance))
+      <span class="hljs-keyword">if</span> (__DEV__) {
+        <span class="hljs-title function_">endMeasure</span>(instance, <span class="hljs-string">`render`</span>)
+      }
+      <span class="hljs-keyword">if</span> (__DEV__) {
+        <span class="hljs-title function_">startMeasure</span>(instance, <span class="hljs-string">`patch`</span>)
+      }
+      <span class="hljs-title function_">patch</span>(
+        <span class="hljs-literal">null</span>,
+        subTree,
+        container,
+        anchor,
+        instance,
+        parentSuspense,
+        isSVG
+      )
+      <span class="hljs-keyword">if</span> (__DEV__) {
+        <span class="hljs-title function_">endMeasure</span>(instance, <span class="hljs-string">`patch`</span>)
+      }
+      initialVNode.<span class="hljs-property">el</span> = subTree.<span class="hljs-property">el</span>
+    }
+    <span class="hljs-comment">// mounted hook</span>
+    <span class="hljs-keyword">if</span> (m) {
+      <span class="hljs-title function_">queuePostRenderEffect</span>(m, parentSuspense)
+    }
+    <span class="hljs-comment">// onVnodeMounted</span>
+    <span class="hljs-keyword">if</span> (
+      !isAsyncWrapperVNode &amp;&amp;
+      (vnodeHook = props &amp;&amp; props.<span class="hljs-property">onVnodeMounted</span>)
+    ) {
+      <span class="hljs-keyword">const</span> scopedInitialVNode = initialVNode
+    <span class="hljs-title function_">queuePostRenderEffect</span>(
+    <span class="hljs-function">() =&gt;</span> <span class="hljs-title function_">invokeVNodeHook</span>(vnodeHook!, parent, scopedInitialVNode),
+    parentSuspense
+    )
+  }
+    <span class="hljs-keyword">if</span> (
+    __COMPAT__ &amp;&amp;
+    <span class="hljs-title function_">isCompatEnabled</span>(<span class="hljs-title class_">DeprecationTypes</span>.<span class="hljs-property">INSTANCE_EVENT_HOOKS</span>, instance)
+    ) {
+    <span class="hljs-title function_">queuePostRenderEffect</span>(
+    <span class="hljs-function">() =&gt;</span> instance.<span class="hljs-title function_">emit</span>(<span class="hljs-string">&#39;hook:mounted&#39;</span>),
+    parentSuspense
+    )
+  }
+
+    <span class="hljs-comment">// activated hook for keep-alive roots.</span>
+    <span class="hljs-comment">// #1742 activated hook must be accessed after first render</span>
+    <span class="hljs-comment">// since the hook may be injected by a child keep-alive</span>
+    <span class="hljs-keyword">if</span> (
+    initialVNode.<span class="hljs-property">shapeFlag</span> &amp; <span class="hljs-title class_">ShapeFlags</span>.<span class="hljs-property">COMPONENT_SHOULD_KEEP_ALIVE</span> ||
+    (parent &amp;&amp;
+    <span class="hljs-title function_">isAsyncWrapper</span>(parent.<span class="hljs-property">vnode</span>) &amp;&amp;
+    parent.<span class="hljs-property">vnode</span>.<span class="hljs-property">shapeFlag</span> &amp; <span class="hljs-title class_">ShapeFlags</span>.<span class="hljs-property">COMPONENT_SHOULD_KEEP_ALIVE</span>)
+    ) {
+    instance.<span class="hljs-property">a</span> &amp;&amp; <span class="hljs-title function_">queuePostRenderEffect</span>(instance.<span class="hljs-property">a</span>, parentSuspense)
+    <span class="hljs-keyword">if</span> (
+    __COMPAT__ &amp;&amp;
+    <span class="hljs-title function_">isCompatEnabled</span>(<span class="hljs-title class_">DeprecationTypes</span>.<span class="hljs-property">INSTANCE_EVENT_HOOKS</span>, instance)
+    ) {
+    <span class="hljs-title function_">queuePostRenderEffect</span>(
+    <span class="hljs-function">() =&gt;</span> instance.<span class="hljs-title function_">emit</span>(<span class="hljs-string">&#39;hook:activated&#39;</span>),
+    parentSuspense
+    )
+  }
+  }
+    instance.<span class="hljs-property">isMounted</span> = <span class="hljs-literal">true</span>
+
+    <span class="hljs-keyword">if</span> (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
+    <span class="hljs-title function_">devtoolsComponentAdded</span>(instance)
+  }
+
+    <span class="hljs-comment">// #2458: deference mount-only object parameters to prevent memleaks</span>
+    initialVNode = container = anchor = <span class="hljs-literal">null</span> <span class="hljs-keyword">as</span> <span class="hljs-built_in">any</span>
+  } <span class="hljs-keyword">else</span> {
+    <span class="hljs-comment">// updateComponent</span>
+    <span class="hljs-comment">// This is triggered by mutation of component&#39;s own state (next: null)</span>
+    <span class="hljs-comment">// OR parent calling processComponent (next: VNode)</span>
+    <span class="hljs-keyword">let</span> { next, bu, u, parent, vnode } = instance
+    <span class="hljs-keyword">let</span> originNext = next
+    <span class="hljs-keyword">let</span> <span class="hljs-attr">vnodeHook</span>: <span class="hljs-title class_">VNodeHook</span> | <span class="hljs-literal">null</span> | <span class="hljs-literal">undefined</span>
+    <span class="hljs-keyword">if</span> (__DEV__) {
+    <span class="hljs-title function_">pushWarningContext</span>(next || instance.<span class="hljs-property">vnode</span>)
+  }
+
+    <span class="hljs-comment">// Disallow component effect recursion during pre-lifecycle hooks.</span>
+    <span class="hljs-title function_">toggleRecurse</span>(instance, <span class="hljs-literal">false</span>)
+    <span class="hljs-keyword">if</span> (next) {
+    next.<span class="hljs-property">el</span> = vnode.<span class="hljs-property">el</span>
+    <span class="hljs-title function_">updateComponentPreRender</span>(instance, next, optimized)
+  } <span class="hljs-keyword">else</span> {
+    next = vnode
+  }
+
+    <span class="hljs-comment">// beforeUpdate hook</span>
+    <span class="hljs-keyword">if</span> (bu) {
+    <span class="hljs-title function_">invokeArrayFns</span>(bu)
+  }
+    <span class="hljs-comment">// onVnodeBeforeUpdate</span>
+    <span class="hljs-keyword">if</span> ((vnodeHook = next.<span class="hljs-property">props</span> &amp;&amp; next.<span class="hljs-property">props</span>.<span class="hljs-property">onVnodeBeforeUpdate</span>)) {
+    <span class="hljs-title function_">invokeVNodeHook</span>(vnodeHook, parent, next, vnode)
+  }
+    <span class="hljs-keyword">if</span> (
+    __COMPAT__ &amp;&amp;
+    <span class="hljs-title function_">isCompatEnabled</span>(<span class="hljs-title class_">DeprecationTypes</span>.<span class="hljs-property">INSTANCE_EVENT_HOOKS</span>, instance)
+    ) {
+    instance.<span class="hljs-title function_">emit</span>(<span class="hljs-string">&#39;hook:beforeUpdate&#39;</span>)
+  }
+    <span class="hljs-title function_">toggleRecurse</span>(instance, <span class="hljs-literal">true</span>)
+
+    <span class="hljs-comment">// render</span>
+    <span class="hljs-keyword">if</span> (__DEV__) {
+    <span class="hljs-title function_">startMeasure</span>(instance, <span class="hljs-string">`render`</span>)
+  }
+    <span class="hljs-keyword">const</span> nextTree = <span class="hljs-title function_">renderComponentRoot</span>(instance)
+    <span class="hljs-keyword">if</span> (__DEV__) {
+    <span class="hljs-title function_">endMeasure</span>(instance, <span class="hljs-string">`render`</span>)
+  }
+    <span class="hljs-keyword">const</span> prevTree = instance.<span class="hljs-property">subTree</span>
+    instance.<span class="hljs-property">subTree</span> = nextTree
+
+    <span class="hljs-keyword">if</span> (__DEV__) {
+    <span class="hljs-title function_">startMeasure</span>(instance, <span class="hljs-string">`patch`</span>)
+  }
+    <span class="hljs-title function_">patch</span>(
+    prevTree,
+    nextTree,
+    <span class="hljs-comment">// parent may have changed if it&#39;s in a teleport</span>
+    <span class="hljs-title function_">hostParentNode</span>(prevTree.<span class="hljs-property">el</span>!)!,
+    <span class="hljs-comment">// anchor may have changed if it&#39;s in a fragment</span>
+    <span class="hljs-title function_">getNextHostNode</span>(prevTree),
+    instance,
+    parentSuspense,
+    isSVG
+    )
+    <span class="hljs-keyword">if</span> (__DEV__) {
+    <span class="hljs-title function_">endMeasure</span>(instance, <span class="hljs-string">`patch`</span>)
+  }
+    next.<span class="hljs-property">el</span> = nextTree.<span class="hljs-property">el</span>
+    <span class="hljs-keyword">if</span> (originNext === <span class="hljs-literal">null</span>) {
+    <span class="hljs-comment">// self-triggered update. In case of HOC, update parent component</span>
+    <span class="hljs-comment">// vnode el. HOC is indicated by parent instance&#39;s subTree pointing</span>
+    <span class="hljs-comment">// to child component&#39;s vnode</span>
+    <span class="hljs-title function_">updateHOCHostEl</span>(instance, nextTree.<span class="hljs-property">el</span>)
+  }
+    <span class="hljs-comment">// updated hook</span>
+    <span class="hljs-keyword">if</span> (u) {
+    <span class="hljs-title function_">queuePostRenderEffect</span>(u, parentSuspense)
+  }
+    <span class="hljs-comment">// onVnodeUpdated</span>
+    <span class="hljs-keyword">if</span> ((vnodeHook = next.<span class="hljs-property">props</span> &amp;&amp; next.<span class="hljs-property">props</span>.<span class="hljs-property">onVnodeUpdated</span>)) {
+    <span class="hljs-title function_">queuePostRenderEffect</span>(
+    <span class="hljs-function">() =&gt;</span> <span class="hljs-title function_">invokeVNodeHook</span>(vnodeHook!, parent, next!, vnode),
+    parentSuspense
+    )
+  }
+    <span class="hljs-keyword">if</span> (
+    __COMPAT__ &amp;&amp;
+    <span class="hljs-title function_">isCompatEnabled</span>(<span class="hljs-title class_">DeprecationTypes</span>.<span class="hljs-property">INSTANCE_EVENT_HOOKS</span>, instance)
+    ) {
+    <span class="hljs-title function_">queuePostRenderEffect</span>(
+    <span class="hljs-function">() =&gt;</span> instance.<span class="hljs-title function_">emit</span>(<span class="hljs-string">&#39;hook:updated&#39;</span>),
+    parentSuspense
+    )
+  }
+
+    <span class="hljs-keyword">if</span> (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
+    <span class="hljs-title function_">devtoolsComponentUpdated</span>(instance)
+  }
+
+    <span class="hljs-keyword">if</span> (__DEV__) {
+    <span class="hljs-title function_">popWarningContext</span>()
+  }
+  }
+  }
+</code></pre></div><ul><li>如果当前实例beforeMount方法存在，先执行beforeMount。</li><li>调用父类的beforeMount函数。</li><li>因为el为null，因此调用renderComponentRoot渲染组件根元素。</li><li>然后调用patch方法，传入的是上一步生成的渲染函数的返回值。</li><li>调用当前实例的mount钩子函数(通过queuePostRenderEffect)。</li><li>调用父组件的mount钩子函数(通过queuePostRenderEffect)。</li><li>如果是keep-alive的缓存组件，则调用activated函数钩子。</li><li>将isMounted标志位置为true。</li></ul><ol start="9"><li>经过上面renderComponentRoot方法得到的root，查看内部属性是这样的<img src="https://im6767.top/yuque/0/2023/png/23007887/1681123683832-18cef397-19fa-4ddf-a3e6-eafdda62c718.png" alt="">能够看到形成了children等属性。我们的模板字符串<code>&lt;div v-for=&quot;xxx&quot;&gt;&lt;/div&gt;</code>是如何变成这样的结构化数据的，这要牵扯到vue内部的compile方法，我们会有一个专门的章节来说明这个过程，现在我们只需要知道已经得到了类似的数据，然后递交给patch方法处理。</li><li>在这次的patch执行中能够看到，这里的类型变成了Fragement，因此执行processFragement函数。在processFragement中，因为n1为空，获取到fragement的开始和结束锚点之后，首先将这两个锚点插入container元素之中，然后执行mountChildren进行子元素挂载。</li><li>mountChildren方法中会对每个子元素调用patch。在我们的示例中，子元素就是div元素，再次进入patch方法，此时因为div是一个原生的ELEMENT，会进入processElement方法进行处理，在processElement方法中，因为是第一次渲染，n1为空，所以直接执行mountElement方法挂载元素。</li><li>mountElement方法中，通过调用hostCreateElement方法，生成实际的DOM元素，在我们的示例中元素的子元素就是一个文本，所以直接执行hostSetElementText方法设置为文本即可，如果元素的子元素是一个数组，那么就递归执行，调用mountChildren方法设置子元素，依次类推...，在组件生成完毕后，调用指令的created钩子函数，调用指令的beforeMount钩子函数，判断是否需要过渡，在以上都执行完毕之后，调用hostInsert方法，将生成的元素插入到container（在这里为父元素）中，调用指令的mounted钩子函数。</li><li>处理完全部的children之后，patch结束，回到我们的componentUpdateFn方法，接着执行mounted钩子函数，如果有activated钩子，则执行activated钩子函数。</li><li>最后，函数执行将会回到mount方法部分，第一次渲染结束。</li></ol><h2 id="小结" tabindex="-1">小结 <a class="header-anchor" href="#小结" aria-label="Permalink to &quot;小结&quot;">​</a></h2><p>在这个章节中，我们介绍了挂载和第一次渲染的逻辑，作为前一个createApp部分的补充。在本文中有一些细节内容没有解释，例如vue在处理模板时，读入的是字符串，是如何通过处理转变为一个结构化对象的，另外组件实例上出现了render方法，render方法是如何生成的。向更深的下一步走，我们将会接触到Diff算法的相关内容，不过在这之前，我们将会用一个章节来解答上面的，模板字符串转化为结构化对象内容的部分。</p><p>从现在的阅读部分来看，我们所面对的数据结构就是一棵树，所以代码中涉及到了很多的递归操作，这在之后的代码中也非常常见。</p></div></div></div><div class="border-l border-gray-300 w-1/4 sticky top-0 box-border hidden lg:block"><ol class="text-stone-500 my-4"><!--[--><!--]--></ol></div><div class="fixed bottom-4 right-4 flex flex-col justify-end items-end lg:hidden"><div class="hidden pr-4 border rounded-md shadow-stone-400 border-stone-300 bg-gray-100 max-w-60 max-h-100 overflow-auto"><ol class="text-stone-500 my-4"><!--[--><!--]--></ol></div><div class="flex items-center justify-center size-16 rounded-full shadow-lg shadow-stone-400 bg-stone-100 lg:hidden"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" size="28" class="tabler-icon tabler-icon-list-tree"><path d="M9 6h11"></path><path d="M12 12h8"></path><path d="M15 18h5"></path><path d="M5 6v.01"></path><path d="M8 12v.01"></path><path d="M11 18v.01"></path></svg></div></div></div><!--]--></div></div></div>
+    <script>window.__VP_HASH_MAP__=JSON.parse("{\"api-examples.md\":\"DD3gooy6\",\"content_blog_2020五月初青岛游·见·闻.md\":\"BJ2NW9aG\",\"content_blog_chrome一个关于settimeout的bug.md\":\"en9Wf7dx\",\"content_blog_echarts之dataset.md\":\"DGzn_-KY\",\"content_blog_event and event loop.md\":\"BWqxgs4J\",\"content_blog_graphql_ 从认知到实践.md\":\"mZK1j90a\",\"content_blog_json web token和sso.md\":\"DNtiJcGR\",\"content_blog_monaco-editor和dan.md\":\"CdGK2zNV\",\"content_blog_more about performance.md\":\"C3DbSjdp\",\"content_blog_react源码系列(一)：react与createroot.md\":\"BjtBRxCe\",\"content_blog_react源码系列(二)_ render.md\":\"XDiURjoV\",\"content_blog_vite out of memory.md\":\"LHHfNuNY\",\"content_blog_vue.js源码系列(一)：工程与createapp.md\":\"BHI2_zk7\",\"content_blog_vue.js源码系列(三)：模板解析与编译.md\":\"C7iz6r6n\",\"content_blog_vue.js源码系列(二)：mount与第一次渲染.md\":\"BDYO3f4C\",\"content_blog_vue.js源码系列(五)：单文件组件.md\":\"Bq6qsH8M\",\"content_blog_vue.js源码系列(四)：响应式与dom diff.md\":\"CpvLbSVa\",\"content_blog_vue3服务端渲染不完全指北.md\":\"CvPj6JDo\",\"content_blog_webrtc入门.md\":\"Cor9YRim\",\"content_blog_《地球之盐》——这个世界的影集.md\":\"C1Nz5gP1\",\"content_blog_《金刚川》——一部中庸的命题作文.md\":\"CJBzXFK5\",\"content_blog_一些前端杂记.md\":\"DBRG9MbH\",\"content_blog_三言两语聊git.md\":\"L80CDUh0\",\"content_blog_不属于我们的电影记忆：《一秒钟》.md\":\"kN-nGj2D\",\"content_blog_不要再被跨域影响你的开发进度了.md\":\"BByopk0g\",\"content_blog_东京街头圣诞夜的奇迹.md\":\"CjOsbrXL\",\"content_blog_从0到1的页面展示之旅.md\":\"8IWaPLBp\",\"content_blog_从http-0.9到http-3.md\":\"Cn6NbDnC\",\"content_blog_你的代码真的健康吗？.md\":\"IWX7uQ4P\",\"content_blog_元素remove和mouseenter的怪癖_bug_.md\":\"BtHtQqEw\",\"content_blog_内联元素间不怎么引人注意的_间隙_.md\":\"BzpmAotJ\",\"content_blog_初识flutter与_月知_.md\":\"B33pELyg\",\"content_blog_前端与图形学——svg.md\":\"DAl6-EQp\",\"content_blog_前端与图形学——贝塞尔曲线.md\":\"DRp4KHt1\",\"content_blog_前端工作相关的杂记（一）.md\":\"DZT6lJrC\",\"content_blog_回首可叹，未来可期.md\":\"Dk9Tx7s3\",\"content_blog_域名证书自动化和一些问题.md\":\"C-l8YA02\",\"content_blog_我也是个年轻人，我心情也不太好.md\":\"2hgsj606\",\"content_blog_我将尽力遗忘这一年.md\":\"BgW1ti_-\",\"content_blog_搞定chrome扩展开发热更新.md\":\"DPfXSc4o\",\"content_blog_数字格式处理.md\":\"HTCOw9ch\",\"content_blog_有点特殊的iframe标签.md\":\"D_vNnaCN\",\"content_blog_没有那么好，也没有那么糟.md\":\"Cw1c4OiR\",\"content_blog_简单搞定深色模式.md\":\"DHQmGKot\",\"content_blog_聊聊前端相关的小知识.md\":\"FtJjl4Ma\",\"content_blog_聊聊排序算法.md\":\"2_1G9qwq\",\"content_blog_讨论_实践——vite_ webpack_ rollup and more.md\":\"CAh6lZ36\",\"content_blog_过去，是为了更好的开始.md\":\"BycV5Ktl\",\"content_blog_鸭子和池塘和蒙特卡洛.md\":\"DSxhPizM\",\"content_index.md\":\"742FpKr1\",\"index.md\":\"znBoR4tq\"}");window.__VP_SITE_DATA__=JSON.parse("{\"lang\":\"en-US\",\"dir\":\"ltr\",\"title\":\"im6767‘s blog\",\"description\":\"im6767's blog project\",\"base\":\"/\",\"head\":[],\"router\":{\"prefetchLinks\":true},\"appearance\":true,\"themeConfig\":{\"nav\":[{\"text\":\"Home\",\"link\":\"/\"},{\"text\":\"Examples\",\"link\":\"/markdown-examples\"}],\"sidebar\":[{\"text\":\"Examples\",\"items\":[{\"text\":\"Markdown Examples\",\"link\":\"/markdown-examples\"},{\"text\":\"Runtime API Examples\",\"link\":\"/api-examples\"}]}],\"socialLinks\":[{\"icon\":\"github\",\"link\":\"https://github.com/vuejs/vitepress\"}]},\"locales\":{},\"scrollOffset\":134,\"cleanUrls\":false}");</script>
+    
+  </body>
+</html>
