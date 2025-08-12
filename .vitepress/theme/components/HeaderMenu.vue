@@ -2,7 +2,7 @@
 import { useData, useRoute } from 'vitepress';
 
 const menu = [
-  { label: '首页', path: '/home/' },
+  { label: '首页', path: '/' },
   { label: '博客', path: '/content/' }
 ]
 const route = useRoute();
@@ -12,7 +12,7 @@ const route = useRoute();
 <template>
   <div class="flex items-center justify-between header-menu font-normal z-3">
     <div class="grow-1 flex justify-around border-b-[1px] border-stone-300">
-      <h3 v-for="item of menu" class="cursor-pointer menu-item relative" :class="{ 'active': route.path.startsWith(item.path) }">
+      <h3 v-for="item of menu" class="cursor-pointer menu-item relative" :class="{ 'active': route.path === item.path }">
         <a :href="item.path" class="inline-block py-3">{{ item.label }}</a>
       </h3>
     </div>
