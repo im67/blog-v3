@@ -6,7 +6,7 @@ const { width, height } = useElementSize(container)
 </script>
 
 <template>
-  <div class="w-full h-full p-6 flex flex-col gap-3">
+  <div class="w-full h-full p-6">
     <section class="flex flex-col gap-3">
       <h2 class="home-title">
         欢迎来的这里
