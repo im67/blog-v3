@@ -3,11 +3,13 @@ import { IconError404 } from '@tabler/icons-vue';
 </script>
 
 <template>
+  <div class="h-full w-full">
   <div class="h-full flex flex-col items-center justify-center gap-4">
     <IconError404 class="size-40 lg:size-60" />
     <div class="font-bold text-lg">你来到了一个不存在的地方</div>
     <a href="/"
       class="px-4 py-2 border border-zinc-400 rounded-md cursor-pointer transition-colors hover:bg-teal-400 swing-button">回到首页</a>
+  </div>
   </div>
 </template>
 
