@@ -60,7 +60,7 @@ const pageList = computed(() => list.value.slice((currentPage.value - 1) * curre
     <div v-for="item of pageList" class="my-6 border-b border-gray-300 py-4">
       <div class="flex flex-col gap-2">
         <h3 class="tracking-wider hover:text-teal-500 transition-colors hover:underline underline-offset-8 w-fit">
-          <a :href="`${pathSuffix}/${item.title}`" class="no-underline relative">{{ item.title }}
+          <a :href="`${pathSuffix}${item.title}`" class="no-underline relative">{{ item.title }}
             <IconLink class="inline p-0.5" :size="33"/>
           </a>
         </h3>
