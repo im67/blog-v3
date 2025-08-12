@@ -7,6 +7,7 @@ import hljs from 'highlight.js'
 export default defineConfig({
   title: "im6767‘s blog",
   description: "im6767's blog project",
+  ignoreDeadLinks: true,
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     nav: [
