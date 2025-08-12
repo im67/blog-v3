@@ -1,0 +1,11 @@
+{
+  "extends": "./.vitepress/tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
+  }
+}

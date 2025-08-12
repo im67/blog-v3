@@ -1,0 +1,420 @@
+---
+title: "JSON Web Token和SSO"
+summary: 身份验证可以说是贯穿互联网应用最普遍的一个功能了，无论是开放API的权限鉴定，还是登录功能，身份验证都是不可绕过的一个话题。认证协议技术也经过了很多的演化，从Cookie到Session，再到JWT，旨在创建开销更小，更灵活更易用的认证方式。作为现在最常使用的技术，JWT(全称JSON Web...
+date: 2023-03-18
+---
+身份验证可以说是贯穿互联网应用最普遍的一个功能了，无论是开放API的权限鉴定，还是登录功能，身份验证都是不可绕过的一个话题。认证协议技术也经过了很多的演化，从Cookie到Session，再到JWT，旨在创建开销更小，更灵活更易用的认证方式。作为现在最常使用的技术，JWT(全称JSON Web Token)成为了认证的主流方式，笔者因为需要构建blog的后台管理部分，且可能在未来进行更多的角色功能扩展，特别对API访问进行控制，所以构建了登录鉴权服务，这里来聊聊JWT中的一些东西。
+
+
+
+## JWT是什么
+JSON Web Token实际上是一个开放的互联网协议标准（详情见：[RFC-7519](https://www.rfc-editor.org/rfc/rfc7519.html)），作用是传递信息，在互联网应用中大多数为服务器和服务器或者服务器和客户端之间进行信息交互。
+
+
+
+如同它的名字一样，其信息格式为JSON格式，为了保证数据的唯一性，JWT采用密码学方式进行签名，避免数据被篡改。
+
+
+
+token的作用就是如此，两个消息方之间通过可以验证真伪性的方式传输信息。其实JWT就是一个字符串，其中包含必要的信息数据和签名，兼顾身份验证和消息通信的功能。
+
+
+
+## 生成一个JWT
+在生成JWT之前，需要了解JWT的三个部分。
+
+### Header
+组成JWT的第一个部分是头部，头部信息通常由两个部分组成：
+
+1. token使用的签名算法。
+2. token的类型，在JWT中，其值为JWT。
+
+一个完整的头部信息大致如下：
+
+```json
+{
+  "typ": "jwt",
+  "alg": "HS256"
+}
+```
+
+其中jwt表示token是JSON Web Token，签名加密方式为SHA256。
+
+然后我们将这个头部的所有空格去除，然后对其的字符串形式进行base64格式的编码：
+
+```javascript
+const header = {
+  "typ": "jwt",
+  "alg": "HS256"
+};
+const jwtHeader = JSON.stringify(header);
+Buffer.from(jwtHeader, 'utf-8').toString('base64');
+//get the result: eyJ0eXAiOiJqd3QiLCJhbGciOiJIUzI1NiJ9
+```
+
+以上是Node.js下的示例代码，如果未做特殊说明，本文代码均以Node.js编写。
+
+
+
+### Payload（**<font style="color:black;">Claims</font>**）
+payload称之为荷载（部分地方也将该部分称之为Claims，声明），主要存放一些需要交互的数据，在协议标准中定义的字段有如下几个，这些字段均为可选，而非必须定义：
+
++ iss：发行人。
++ sub：主题部分。
++ aud：接收者。
++ exp：过期时间，一般用于标识JWT的有效日期截止时间，在官方标准中声明，超过exp时间不再接受对JWT的处理。
++ nbf：声明生效时间，如果在生效时间之前，不接受对JWT的处理。
++ iat：签发时间，存储JWT的发布时间。
++ jti：全称是JWT ID，是JWT的唯一标识符，主要用于重放攻击，这个在后续进行说明。
+
+除了以上部分，也可以向payload内部放入自定义的属性和属性值，可以存放一些基本的用户信息，例如用户的user_id，email等信息，以便通信双方可以获取基本的用户信息。当然这个也不是必须的，取决于你的设计，你当然可以只存入一个标识，然后通过其它手段去获取必要内容，都是OK的。如下是一个示例的payload信息：
+
+```json
+{
+  "iss": "im6767",
+  "sub": "im6767",
+  "aud": "JWTReciverNo1244",
+  "exp": 1679150724891,
+  "iat": 1678838400000,
+  "user": "1056966560797",
+  "email": "im6767@qq.com"
+}
+```
+
+然后我们将这个JSON转化为字符串，去除所有空格之后，使用base64进行编码：
+
+```json
+const payload = {
+  "iss": "im6767",
+  "sub": "im6767",
+  "aud": "JWTReciverNo1244",
+  "exp": 1679150724891,
+  "iat": 1678838400000,
+  "user": "1056966560797",
+  "email": "im6767@qq.com"
+}
+const jwtPayload = JSON.stringify(payload);
+Buffer.from(jwtPayload, 'utf-8').toString('base64');
+//get the result: eyJpc3MiOiJpbTY3NjciLCJzdWIiOiJpbTY3NjciLCJhdWQiOiJKV1RSZWNpdmVyTm8xMjQ0IiwiZXhwIjoxNjc5MTUwNzI0ODkxLCJpYXQiOjE2Nzg4Mzg0MDAwMDAsInVzZXIiOiIxMDU2OTY2NTYwNzk3IiwiZW1haWwiOiJpbTY3NjdAcXEuY29tIn0=
+```
+
+**注意：不要将不应该泄露的重要信息存放在payload中，因为仅为base64编码，实际上整个数据还是明文传输的，应当只存放和交互有关的必要信息。**
+
+
+
+### Signature
+签名的作用是为了保证Header和Payload中的信息不会被篡改，其目的是，如果对上面的Header和Payload中的信息进行了篡改，签名信息能够发现这个行为。提到保证唯一性，我们通常使用的就是hash算法，所以选用所需要的hash算法即可。注意这个加密方式需要和Header中的加密方式对应。
+
+
+
+首先我们将生成的Header和Payload的base64字符串用.拼接成一个新的字符串，然后使用加密算法对该字符串进行加密，之后进行base64编码转化，得到的即为Signature：
+
+```javascript
+import crypto from "crypto";
+const str = base64Header + '.' + base64Payload;
+//这里根据你的算法方式进行秘钥设置和选用加密方式（示例为sha256）
+const privateKey = "yourkey";
+const signature = crypto.createHmac('sha256',privateKey).update(str).digest('base64');
+//get the result: NZwVytumhQu4mhc1+WRFry2pXCG8YXroDuZnEtRePi0=
+```
+
+
+
+### 最后的拼接
+经过以上步骤，我们获得了组成JWT的三个部分，Header, Payload和Signature，接下来我们将三个部分依次用.进行拼接，得到的字符串就是完整的JWT:
+
+```javascript
+`eyJ0eXAiOiJqd3QiLCJhbGciOiJIUzI1NiJ9.
+eyJpc3MiOiJpbTY3NjciLCJzdWIiOiJpbTY3NjciLCJhdW
+QiOiJKV1RSZWNpdmVyTm8xMjQ0IiwiZXhwIjoxNjc5MTUw
+NzI0ODkxLCJpYXQiOjE2Nzg4Mzg0MDAwMDAsInVzZXIiOi
+IxMDU2OTY2NTYwNzk3IiwiZW1haWwiOiJpbTY3NjdAcXEuY29tIn0=
+.NZwVytumhQu4mhc1+WRFry2pXCG8YXroDuZnEtRePi0=
+`
+```
+
+为了方便展示，这里进行了折行处理，实际上应该是一个单行字符串，这就是我们最终得到的JWT，从整个过程中我们可以看出，Header和Payload部分都是明文的，而私钥是整个验证的关键，所以不能将私钥暴露，他应当只存在于受信任的服务上，且不可以被获取到。
+
+
+
+JWT应该通过什么样的方式被传递呢？这个其实没有明确的规定，你可以通过请求参数和响应，也可以拼接在请求的URL中进行解析，同样可以放在请求header中，或者放在cookie中，都是可以的，但是要注意一些细节，URL拼接需要注意的是可能会让URL变得很长，从而引起一些服务端响应上的问题，所以更常用的做法是通过请求头来进行传播：设置Authentication请求头，值为Bearer {JWT}的形式进行传递，服务端通过头信息进行解析。当然，这完全取决于你需要的业务实现。
+
+
+
+## 更多的细节
+在上面，我们实现了一个jwt的生成算法。作为一个可以说是最常见的鉴权方式，当然有大量的现成工具可以使用，笔者在构建的过程中，使用了npm的jsonwebtoken包，来验证整个过程的正确性，却发现经由自己生成的jwt无法通过jsonwebtoken的验证方法。经过检查算法后，也没有发现对应地问题所在，于是乎通过debug开始查找问题，然后看到内部对签名部分的base64进行了处理，主要包含以下三个部分：
+
+1. 移除了base64末尾用来占位补足长度的所有'='字符。
+2. 将base64中'+'全部替换为'-'。
+3. 将base64中的'/'全部替换为'_'。
+
+这是一个比较容易被忽略的细节。这样做的原因实际上是为了使得JWT对URL内容和对文件路径内容友好，是规定在标准文档中的内容，[详见RFC-7515：JWS部分](https://www.rfc-editor.org/rfc/rfc7515.html#section-3.2)。
+
+
+
+在jsonwebtoken的官方github的issue中，也看到过有人提问获得了亚马逊应用签发的token却无法验证的情况，也是因为这个引起的，亚马逊方发送的签名没有对指定字符进行处理。
+
+
+
+事实上在很多技术实现上，有一些标准细节囊括其中，作为开发者可能没有办法非常详细的了解，从而构建出不是完全符合功能的代码，特别是你并非对该功能的长久维护者，所以尽量使用普适性的包来构建自己的功能是合理且必要的。
+
+
+
+## 视野退到宏观
+我们从实现细节出来，讨论一下JWT的宏观部分。
+
+
+
+实际上根据上述阐述，我们可以知道JWT的运作原理如下：
+
+![](/yuque/0/2023/png/23007887/1679194125561-6edea353-f306-4afd-a33d-b4567ec46db7.png)
+
+在实际的实现中，一般登录鉴权是单独的服务，各种api服务是另外单独的服务，那么就会产生一些问题：各服务如何验证这个token是否有效，这其实是笔者比较疑惑的一个问题。
+
+
+
+### 当然是鉴权中心
+一个可以想到的方法是，由鉴权中心来给定，这次鉴权是不是有效。所以当各个服务接收到token之后，会去询问鉴权中心，这个token是否是有效的，鉴权中心经过判断后给出结论，从而完成验证token的能力。这样的话鉴权中心所承担的任务就会相对繁重：既要负责身份验证，token分发，还要对token的有效与否进行鉴定，可能会有比较大的服务开销，特别是其中可能产生的网络请求开销，可能是这种实现方式所必须考虑的问题。
+
+
+
+### 不妨让他们去做
+如果你的应用全部在体系内部，那么这件事情还可以变得简单，你信任你所有的服务环境，那么不如放权：将秘钥给他们，由鉴权服务或者中间件自行计算，来验证这个token是否有效，这样的话登录服务就会简单，只需要负责token的分发就可以，而各个应用因为持有秘钥，所以可以自行验证，只需要保证整个秘钥的安全与否即可。
+
+
+
+不过如果需要使用到JWT的服务来源不同，那么就不太行的通了：因为直接提供秘钥似乎是不怎么优雅的行为。
+
+
+
+也可以使用一个中间介质，例如Redis，将分发的token信息存放其中。需要验证？服务自行去Redis中查找token进行判断即可，登录中心分发完token将token信息写入Redis即可。这当然会带来额外的开销，但是能够通过硬件解决的问题可能也不是什么大问题。
+
+
+
+## 一些特点
+相较于Session和Cookie的校验方案，JWT有其独特的特点。
+
+### 无状态
+无状态是JWT最大的特点，因为JWT中本身包含了身份验证所需要的信息，所以不像服务器，还需要存储Session信息，减轻了服务器压力，增强了伸缩性，但是无状态带来的另一个大问题就是：**JWT的有效是不可控的**。
+
+
+
+根据上文方式，我们知道，jwt的特点就是，有关于有效和无效期的内容，在一开始生成时就已经确定了，如果在这个token仍然处于有效期时间内，权限、用户信息之类的内容发生了变化，无法有效的将这个token废除。甚至当用户登出的时候，实际上这个token仍然是有效的。这其实也是很多大型互联网公司和应用不单纯使用JWT的原因之一，因为对于这些应用来讲，实时的用户信息变动和权限等变动时非常必要的。如果想要解决这些问题，就需要额外的逻辑来进行控制。
+
+
+
+### 避免CRSF攻击
+传统的Cookie是可能会形成跨站请求伪造的，由于JWT不强依赖于Cookie，所以可以避免发生。
+
+
+
+### 适合单点登录
+因为JWT信息保存在客户端，所以无需像Session一样保存在一台电脑上。
+
+
+
+## 解决方案
+我们看到了一些JWT存在的问题，同时也会有一些直觉意义上的处理方法:
+
+
+
+关于无状态带来的登录注销，权限变动的问题，其根本是如何保证JWT的实时有效性，我们当然可以通过上面提到的方式，将其放入一个内存数据库，例如Redis来解决，如果需要让某个token失效，就直接从Redis中删除这个数据，这样带来的问题就是JWT的每次请求都要从数据库中查询JWT是否存在。
+
+
+
+相反而行之的方式是黑名单制度，类似于上面的做法，利用内存数据库维护一个JWT黑名单，如果某个JWT失效就放入黑名单，JWT判断时先判断是否在黑名单中，如果存在就直接判断无效。
+
+
+
+这两种方案问题在于，违背了JWT的无状态原则。
+
+
+
+同样地我们可以通过修改秘钥来完成这个动作，但是很愚蠢，因为需要及时同步秘钥，而且假设在多个终端进行了登录，在一个设备上登出，其他设备也会对应登出，不ok。
+
+
+
+另外存在token过期的问题，假如一个用户在这次登录中使用了token，有效期为两个小时，他在两个小时候之后进行了某次接口调用，就会返回错误，他需要重新登陆获取一个新的token。这样的操作无疑是非常令人恼火的，但是确实存在，有人会说将token时间设置的足够长就可以，但是这意味着你的token似乎变成了一个更长时间有效的验证工具，实际上会有更多的问题，通常这个时间比较难以控制：短的token有效期意味着更好的权限控制，但是会有更快地过期问题，过长的则相反，所以一般会使用刷新token的方式。我们获取到使用的token有效期为短时间，例如一个小时，另一个返回的token用来刷新token，过期时间可以略长，例如1天，这样每次登录，如果token过期，就将refreshToken传递给服务端，服务端生成新的token返回到客户端，如果两个token都过期，则进行重新登陆处理，这样意味着如果类似于登出操作时，要注意将两个token都注销处理。
+
+
+
+## 实践：SSO
+我们完成了一个鉴权功能，接下来我们利用这个流程进行一个简单的单点登录功能，看看如何处理。SSO的概念不再具体解释，可以自行查阅，总的来说宗旨就是，一次登录，访问同一个系统体系下的所有应用。从JWT的应用角度来讲，这也很容易理解——只要各系统接收，鉴别JWT，就能获取到用户的信息，从而为用户提供服务。
+
+
+
+我们构建一个登录中心，其域名为login.im6767.xyz，负责登录和token分发；有一个管理应用，其域名为manage.im6767.xyz，需要身份验证之后才能使用。
+
+当我们执行登录后，首先遇到的问题是，登陆之后如何处理token才能够正确流转？
+
+### localStorage
+一个容易想到的方式是，请求登录接口，登录接口返回token，然后前端将token写入localStorage，每次请求发送时从localStorage中取出token携带即可。当我们的应用位于同一个域名下，这个方案无疑是没有问题的，但是如果按照上述的条件就不可以了，因为localStorage是严格同域的，不同域无法获取到其内容。也就是说，login.im6767.xyz写入了localStorage，其只能在login.im6767.xyz下使用，所以manage.im6767.xyz无法获取token，这种情况下无法实现。
+
+当然通过iframe嵌套和postMessage来实现不同域之间交换token也是可以的，这取决于你的实现。
+
+
+
+### 可以跨域分享的Cookie
+根据localStorage的限制，我们很容易想到一个可以在不同域之间流转的存储介质，Cookie。Cookie可以通过设置，在域和子域之间交换信息，因此我们可以将token写入Cookie。进一步地，既然使用Cookie，那么服务端利用Set-Cookie请求头就可以完成这个操作，无需客户端的参与。
+
+
+
+### 有什么问题？
+无论是localStorage还是Cookie，都是本地存储，那么利用这种本地存储会有哪些问题？是的，就是XSS攻击。一些XSS漏洞可能会导致本地存储的数据被恶意的JS代码读取从而被攻击者收集，再利用该token进行接口调用，访问对应的资源，因此不够安全。既然我们使用服务器的Set-Cookie，我们完全可以通过设置Cookie的安全策略来降低风险——设置httpOnly，保证其不能被JS获取，在每次请求时依旧可以携带对应Cookie中的token。当然，面对存储型XSS攻击还是力不从心，因此从根源上避免XSS攻击是非常必要的。我们也可以通过严格限制页面的JS执行和加载策略防范攻击，这些细节不在我们的讨论范围之内。
+
+
+
+### Cookie额外隐患
+提到Cookie就很容易和另一个安全问题联系起来——CSRF。所以当我们的token存放在Cookie中携带时，同样必须考虑这种安全问题的可能性。防御CSRF的方式有很多，一个常用的方式是通过另一个token，csrf-token来解决，关键的请求发送时，请求头需要携带csrf-token，后端进行验证，从而执行后续逻辑。
+
+
+
+### 例子
+我们以一些简单的代码片段来描述这个过程：
+
+> 接下来的示例代码中均使用Nest.js和axios作为服务端和客户端请求发送工具来展示
+>
+
+在login.im6767.xyz登录界面输入用户名和密码之后，后端进行校验，如果通过，则生成token和crsf_token
+
+```typescript
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
+
+  @Post('/login')
+  async login(
+    @Body() loginInfo: LoginInfo,
+    @Res({ passthrough: true }) resp: Response
+    ) {
+    try {
+      //生成jwt
+      const token = await this.authService.getToken(loginInfo);
+      //利用jwt生成一个签名值, 作为crsf_token
+      const crsf_token = await this.authService.getCRSFToken(token);
+      //利用set-cookie设置token, 设置有效时间, 域为主域, JS不可操作
+      //设置csrf_token，允许JS操作
+      resp.cookie('access_token', `${token}`, {
+        maxAge: 7200000,
+        path: '/',
+        // secure: true,
+        httpOnly: true,
+        domain: "im6767.xyz",
+      });
+
+      resp.cookie('csrf_token', `${crsf_token}`, {
+        maxAge: 7200000,
+        path: '/',
+        domain: "im6767.xyz",
+      });
+
+      return {
+        code: 200,
+        data: {
+          token,
+          crsf_token
+        }
+      }
+    } catch (e) {
+      throw new UnauthorizedException("invalid email or password")
+    }
+  }
+}
+```
+
+
+
+执行登录成功后，login.im6767.xyz重定向至所需要进入的系统页面（manage.im6767.xyz）
+
+
+
+manage.im6767.xyz系统中的请求发送时，从cookie中读取csrf_token，并且请求头中添加csrf-token请求头，
+
+值为对应值。后端接口接收到请求后，验证token和csrf_token的值，如果未通过返回结果，说明身份验证有误/过期等，前端执行对应逻辑，通常是重定向至登录界面，要求用户重新身份验证。
+
+此时我们有两个策略：
+
+1. 由manage.im6767.xyz的前端进行重定向。当manage.im6767.xyz调用某个接口，后端验证未通过时，前端收到鉴权失败的响应，执行重定向。
+2. 由后端发起，如果失败之后，直接返回302重定向请求，跳转至login.im6767.xyz。
+
+以上两个策略均可，但是有细微差别。如果是前端完成，这意味着用户仍旧能够进入系统内部（前端资源正常加载），如果你从静态资源获取开始就需要限制，则推荐后者，一个可行的方式如下：
+
+```typescript
+//利用Nest.js服务来管理静态资源, 相当于一个小网关
+@Module({
+  imports: [
+    ServeStaticModule.forRoot({
+        rootPath: join(__dirname, '../..', 'client'),
+      }),
+  ],
+  controllers: [StaticController]
+})
+
+//接管所有静态资源的请求
+@Controller()
+//错误拦截器统一处理错误
+@UseFilters(new StaticExceptionFilter())
+export class StaticController {
+  constructor() {}
+
+  @Get('/*')
+  //绑定权限控制的守卫
+  @Bind(AuthRedirect(302))
+  getHello(
+    @Req() request,
+    @Next() next
+  ): void {
+    //注意next放行
+    next()
+  }
+}
+
+//静态资源权限验证的守卫
+//请注意csrf-token不需要被验证, 因为静态资源不会携带csrf-token
+//当没有满足守卫时, 抛出一个重定向的302错误
+export const AuthRedirect = createParamDecorator((_, ctx: ExecutionContext) => {
+  const request = ctx.switchToHttp().getRequest();
+  const token = request.cookies?.access_token;
+  //缺少jwt验证不通过
+  if (!token) {
+    throw new HttpException('redirect', HttpStatus.FOUND); 
+  }
+  else {
+    //进行验证
+    try {
+      jwt.verify(token, SECRET_KEY);
+      return true;
+    } catch(e) {
+      throw new HttpException('redirect', HttpStatus.FOUND); 
+    }
+  }
+});
+
+//错误过滤器中如果监测到302错误, 则将请求重定向至login.im6767.xyz
+@Catch(HttpException)
+export class StaticExceptionFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+    const status = exception.getStatus();
+    if (status === 302) {
+      response.redirect('https://login.im6767.xyz/login?redirect=https://manage.im6767.xyz/admin/articles');
+    }
+  }
+}
+```
+
+此时，当没有经过授权直接访问manage.im6767.xyz时，将直接重定向至login.im6767.xyz，从而实现更为严格的权限控制——甚至无法访问静态资源。
+
+
+
+当然，这整个过程中，需要考虑的细节问题不止这些，这里仅做流程参考，实际问题结合实际情况进行处理即可。
+
+## 一些思考
+初识JWT的过程到这里就差不多结束了，实际上有人可能会疑惑，既然JWT有如此多的问题，呢么是不是意味着JWT本身就是不可取的，否则为什么那么多大厂都不使用这个技术方案？
+
+
+
+在笔者看来，脱离实际场景谈论技术是一个非常致命的错误。在一些实时性比较强的场景下，无状态的JWT带来的弊端确实更容易造成一些问题，而诸如开放API等形式的鉴权，JWT却显得更加适用。所有的技术问题，最终都会有对应的解决方案，实际上，追求万物极致的解决方案是对顶级美好的追求，但是寻找当下场景最易用合适的解决方案是一个工科人员的使命和原则。
+

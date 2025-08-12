@@ -1,0 +1,64 @@
+---
+title: '元素remove和mouseenter的怪癖"BUG"'
+summary: '2021年开年就遇到一个诡异的问题：移除子元素会触发到父元素的mouseenter事件。排除了一切可能的JS代码逻辑中的问题，逐渐意识到这可能是浏览器行为的"怪癖"，既然chrome是开源的，不妨深入chrome内部，在探究问题的同时，窥探一下浏览器的内部世界。'
+date: 2021-01-24
+---
+<h2>诡异的问题</h2><p>在工作中遇到这样一个问题：一个场景是当鼠标移入某个元素时，元素左上角需要显示一个关闭的x，鼠标移出某个元素时关闭的x消失。手头的这份代码的实现原理是，当鼠标移入指定元素时，触发mouseenter事件，将x的元素append进DOM树，鼠标移出后，触发mouseleave事件，将x元素remove。咱们暂且不去评论这个下等马的实现方式。在这段逻辑中有一个比较特别的地方，目标元素内部还有一个子元素，当这个子元素被点击时，需要移除掉，这个时候诡异的事情就发生了，当鼠标移入目标元素，到子元素上时，点击子元素，子元素移除(Element.remove())，此时鼠标移出父元素，右上角的X没有消失。</p><p>通过测试发现，mouseenter和mouseleave确实都正确触发了，但是这个x确实还在。再经过仔细的观察和对比发现，其实并不是x没有移除，而是mouseenter事件在子元素移除后，又触发了一次，导致产生了两个x元素，当mouseleave的时候，预想中的那一个被正确移除了，但是额外的那个依旧存在，这时问题的本质就出现了：子元素移除，会触发父元素上绑定的mouseenter事件。为了验证自己的推测，笔者写了一个简单的测试页面，结果如图：</p><p><img src="https://www.im6767.top/articlePlates/1611496612387.gif"></p><p>注意看控制台信息，当鼠标移入红色背景色的元素时，触发到了mouseenter事件，右侧控制台打印出一条信息。当左上角子元素移除时，控制台信息数量变成了2。如果你有兴趣，可以自己写测试页面测试一下。由于此测试页面不具有理解难度，这里不再给出测试步骤。</p><p>这个显然和我的认知冲突，我尝试查找了很多文档和论坛，几乎没有地方提到过这个细节。出于好奇我在火狐和IE上同样运行了测试代码，结果火狐和chrome行为保持一致，而IE和我的预想是相同的，仅仅在鼠标移入父元素时触发了一次，子元素移除并没有触发。这是一个和浏览器具体实现密切相关的问题，但是确实没有办法得到一个对此行为的合理解释。当从已知的途径中无法得到正确的解释，我不得不自己去探求其更深一层的原因了。</p><h2>宇宙第一浏览器——chrome</h2><p>作为全宇宙最好用的浏览器，chrome的开源就是其最大的特点，因此笔者决定从chrome源码中寻找答案。关于如何正确处理chrome源码的相关资料很多，但是大多都显得笼统和简略，对于熟练的C++开发者来讲没有难度，但是对于诸如我们这样的入门者这些资料显得过时和粗略了。笔者这里借助这个机会，记录下自己在整个过程中的关键步骤，以供参考，帮助有类似需求的人完成chrome的源码编译。请注意，以下内容均在windows10系统环境下完成，mac等非windows环境下仅供参考。</p><h4>Visual Studio 2019</h4><p>关于IDE的选择当然是Visual Studio，这也是google官方推荐的IDE。不得不说微软毕竟是微软，真的很会做IDE。这部分没什么好说的，进入官网或者<a href="https://visualstudio.microsoft.com/zh-hans/vs/" rel="noopener noreferrer" target="_blank">点击这里</a>下载最新版本的Visual Studio，然后安装。一般不用做什么改动，按照默认一步一步往下就可以。一般不建议更换安装路径，避免编译时找不到文件。</p><h4>depot_tools</h4><p>depot_tools是google提供的一个集成化的工具，用来辅助代码获取等工作。<a href="https://storage.googleapis.com/chrome-infra/depot_tools.zip" rel="noopener noreferrer" target="_blank">点击这里</a>下载压缩包，完成后解压，任意路径都可以。例如解压到E:\chrome下。接着要将其添加进入环境变量Path中。特别注意请将该路径放置在环境变量的最前面，如果你的电脑中安装了python的相关环境，一定要放在他们的之前。然后在系统环境变量中添加<span style="color: rgb(51, 51, 51);">DEPOT_TOOLS_WIN_TOOLCHAIN，值为0。最后进入depot_tools的安装目录，cmd中执行gclient即可。</span></p><h4>前置条件</h4><p>以上和以下步骤需要有的前提条件需要说明：第一，你需要有良好的网络环境，这个是指在通过工具能保持一定网速、长时间不间断的访问谷歌，否则接下来的步骤会让你抓狂。第二，你需要有一台配置过得去的PC，配置决定你所花费的时间。第三，你需要有足够的忍耐度，失败是不可避免的，新东西的探究是建立在快乐的基础上，如果失败容易让你暴躁，那么请不要再继续尝试下面的步骤了。</p><h4>获取代码</h4><p>接下来就是要开始获取chrome浏览器的源代码了。在gclient成功之后，我们创建新的目录</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-built_in">mkdir</span> chromium &amp;&amp; <span class="hljs-built_in">cd</span> chromium
+</pre><p>接着</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-attribute">fetch</span> --<span class="hljs-literal">no</span>-history chromiumn
+</pre><p>注意--no-histroy，这表明你不需要历史版本的代码，只需要获取最新的chrome，这将很大程度上减少你需要获取的代码。接着就是漫长的等待，取决于你的网速快慢。一般需要获取的内容大小是4个多G，获取过程分为两个部分，从控制台的输出内容中就能看出，第一阶段显示进度，这个过程是不能停止的。假如发生了断网、或者你结束了进程、或者电脑重启等等，你将只能重复上述步骤，重新来过，笔者在这个过程中下载了6次才完成。第二个阶段将会获取很多文件内容，不知道为何这个过程失败的几率更大， 一般都是因为网络返回400引起的，这个时候如果出现了错误，可以使用gclient sync同步就可以了，不必要再去fetch来经历痛苦的下载。</p><p>下载完毕后，将会自动生成src文件夹，我们进入src目录。</p><h4>生成编译文件</h4><p><span style="color: rgb(51, 51, 51);">Chromium使用Ninja作为编译工具,使用GN生成.ninja配置文件</span></p><p><span style="color: rgb(51, 51, 51);">输入如下gn args命令,在out\mybuild目录下创建编译所需配置文件</span></p><pre class="ql-syntax" spellcheck="false"><span class="hljs-built_in">gn</span> <span class="hljs-built_in">args</span> out\mybuild
+</pre><p>执行完毕后，将会打开一个记事本文件，将以下内容粘贴进入，保存。</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-attr">use_jumbo_build</span> = <span class="hljs-literal">true</span>
+<span class="hljs-attr">enable_nacl</span> = <span class="hljs-literal">false</span>
+<span class="hljs-attr">target_cpu</span> = <span class="hljs-string">"x64"</span>
+<span class="hljs-attr">symbol_level</span> = <span class="hljs-number">2</span>
+<span class="hljs-attr">blink_symbol_level</span>= <span class="hljs-number">2</span>
+<span class="hljs-attr">is_debug</span> = <span class="hljs-literal">true</span>
+<span class="hljs-attr">ffmpeg_branding</span> = <span class="hljs-string">"Chrome"</span>
+<span class="hljs-attr">proprietary_codecs</span> = <span class="hljs-literal">true</span>
+<span class="hljs-attr">is_component_build</span> = <span class="hljs-literal">true</span>
+<span class="hljs-attr">dcheck_always_on</span> = <span class="hljs-literal">true</span>
+<span class="hljs-attr">is_official_build</span> = <span class="hljs-literal">false</span>
+</pre><p>略微解释一下上面的内容。这些是编译的一些参数，其中比较关键的有三个地方：symbol_level，blink_symbol_level和is_debug。symbol_level和blink_symbol_level分别有三个值：0,1,2，他们的区别是，0的时候不生成调试符号，此时代码编译速度是最快的。1代表调试符号不包含源代码信息，不能进行源代码级别的调试，编译速度稍慢。2代表完整的调试符号，可以进行源代码级别的调试，编译速度是最慢的。一般网上给出的推荐配置都是0，这个比较坑，你有可能在经历了漫长编译，终于兴致勃勃的打开了代码，打上断点，发现IDE提示你无法命中断点。而blink_symbol_level则是指是调试blink的等级。blink在你对chrome代码稍有了解后你就会发现，和前端知识中相关的精华部分，都是blink部分的内容，例如DOM树，例如各种事件等等，所以如果需要调试底层的实现，这两个都需要设置为2。is_debug如果为true，编译为debug版本，会有调试信息输出，否则是release版本。上述配置是笔者编译时使用的配置，可以作为推荐参考，从笔者使用来看，该有的都有了。更多的关于编译相关的配置，可以参考google官方<a href="https://www.chromium.org/developers/gn-build-configuration" rel="noopener noreferrer" target="_blank">配置说明</a>或者<a href="https://gclxry.com/article/chromium-build-args/" rel="noopener noreferrer" target="_blank">这篇博客</a>。</p><h4>开始编译</h4><p>编译使用Ninja命令进行处理</p><pre class="ql-syntax" spellcheck="false">ninja -j <span class="hljs-number">6</span> -C <span class="hljs-keyword">out</span>/mybuild chrome
+</pre><p>命令中-j后面的数字表示编译时使用的进程数，越多编译速度越快，但是低配电脑使用多进程可能出错。个人经验PC有几个核心就使用几个线程，笔者的电脑是6核，所以这里使用6。</p><p>编译过程非常漫长，笔者编译使用了五个半小时左右。不过编译过程是允许增量编译的，可以中途停止，或者出现报错后，解决完错误，再次使用上述命令继续编译。</p><h4>查看编译结果</h4><p>如果上述过程都顺利完成，在out/mybuild目录下就可以找到chrome.exe，就是我们编译生成的浏览器了，愉快的运行它试试吧。如果在整个过程中遇到了问题，你需要在网上找找答案，因为笔者整个过程顺利的完成了，并没有遇到太多的困难。顺便说一句，百度能找到的答案确实有限，或许google才是你需要的。</p><h4>开始调试chrome</h4><p>chrome代码的调试我们使用第一步下载的Visual Studio， 打开代码路径，生成解决方案。在这之前我强烈推荐使用gn的命令行工具进行解决方案的生成，Visual Studio在打开调试chrome时，真的很容易卡死，闪退。</p><pre class="ql-syntax" spellcheck="false">gn gen --ide=vs <span class="hljs-keyword">out</span>\<span class="hljs-keyword">Default</span>
+</pre><p>运行上述命令，将会针对Visual Studio生成解决方案。完成后，使用Visual Studio打开out\Default下的all.sln即可。这样生成的模块非常非常多，以至于每次运行项目时Visual Studio都会加载9000多个模块，花费数分钟乃至数十分钟，且非常非常容易闪退。如果你对chrome源码有了更多的理解，你可以使用filter来过滤掉自己不关注的代码部分，而只是生成自己关注部分的模块，来提升体验，对于笔者这样的新手，不得不忍受上述问题了。</p><p>好了，关于chrome源码编译部分的内容到此结束，如果你需要更多更详细的内容，可以参考<a href="https://chromium.googlesource.com/chromium/src/+/master/docs/windows_build_instructions.md" rel="noopener noreferrer" target="_blank">google官方给出的chrome构建指南</a>来获取相关信息。</p><h2>开始探索BUG</h2><p>运行我们编译的chrome，使用chrome打开我们用于探究问题的测试页面。然后我们在chrome中按下Shift+Esc呼出chrome的控制台，查看下当前测试页面所对应的进程ID。</p><p><img src="https://www.im6767.top/articlePlates/1611667118921.png"></p><p>然后在Visual Studio中，"调试"→"附加到进程"选择对应进程ID的进程，点击"附加"。</p><p><img src="https://www.im6767.top/articlePlates/1611667670483.png"></p><p>然后就可以愉快的在代码中打断点调试了。那么如何确定自己的断点要打在什么位置呢？这个就需要自己分析了，这里提供一个google官方的code search工具，<a href="https://source.chromium.org/chromium" rel="noopener noreferrer" target="_blank">点击这里</a>查看。在这里你可以搜索关键词，结果将会为你展示相关代码所在的文件位置。例如，在本次试验中实际上有两个关键操作：removeChild和mouseenter，可以通过code search工具来搜索这两个关键词，找到对应地代码位置，然后转向我们的本地代码，搜索打开对应地文件，打上断点，操作页面进入断点，然后一步一步发现线索。</p><p>code search开始使用时大概率是懵逼的，因为chrome实在是太庞大了。很多C++相关熟练开发人员都表示，chrome整个项目庞大到学习起来很吃力。我们作为了解者，并不需要深入理解，窥其一隅即可。</p><p>在上面提到的这个怪异的行为中，为了排除其他事件干扰，我使用了一个比较好用的办法：找到了preventDefault方法的内部实现，然后在测试代码中mouseenter事件中调用了e.preventDeault()，成功命中了断点，然后一步步向上追踪。具体的debug过程不再详细叙述，直接进入结果。最终我们追踪至web_frame_widget_impl.cc中：</p><pre class="ql-syntax" spellcheck="false">void WebFrameWidgetImpl::BeginMainFrame(base::TimeTicks last_frame_time) {
+&nbsp; TRACE_EVENT1(<span class="hljs-string">"blink"</span>, <span class="hljs-string">"WebFrameWidgetImpl::BeginMainFrame"</span>, <span class="hljs-string">"frameTime"</span>,
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;last_frame_time);
+&nbsp; DCHECK(!last_frame_time.is_null());
+&nbsp; CHECK(LocalRootImpl());
+
+
+&nbsp; <span class="hljs-comment">// Dirty bit on MouseEventManager is not cleared in OOPIFs after scroll</span>
+&nbsp; <span class="hljs-comment">// or layout changes. Ensure the hover state is recomputed if necessary.</span>
+&nbsp; LocalRootImpl()
+&nbsp; &nbsp; &nbsp; -&gt;GetFrame()
+&nbsp; &nbsp; &nbsp; -&gt;GetEventHandler()
+&nbsp; &nbsp; &nbsp; .RecomputeMouseHoverStateIfNeeded();
+
+
+&nbsp; <span class="hljs-comment">// Adjusting frame anchor only happens on the main frame.</span>
+&nbsp; <span class="hljs-keyword">if</span> (ForMainFrame()) {
+&nbsp; &nbsp; <span class="hljs-keyword">if</span> (LocalFrameView* view = LocalRootImpl()-&gt;GetFrameView()) {
+&nbsp; &nbsp; &nbsp; <span class="hljs-keyword">if</span> (FragmentAnchor* anchor = view-&gt;GetFragmentAnchor())
+&nbsp; &nbsp; &nbsp; &nbsp; anchor-&gt;PerformPreRafActions();
+&nbsp; &nbsp; }
+&nbsp; }
+
+
+&nbsp; base::Optional&lt;LocalFrameUkmAggregator::ScopedUkmHierarchicalTimer&gt; ukm_timer;
+&nbsp; <span class="hljs-keyword">if</span> (WidgetBase::ShouldRecordBeginMainFrameMetrics()) {
+&nbsp; &nbsp; ukm_timer.emplace(LocalRootImpl()
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; -&gt;GetFrame()
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; -&gt;View()
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; -&gt;EnsureUkmAggregator()
+&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; .GetScopedTimer(LocalFrameUkmAggregator::kAnimate));
+&nbsp; }
+
+
+&nbsp; PageWidgetDelegate::Animate(*GetPage(), last_frame_time);
+&nbsp; <span class="hljs-comment">// Animate can cause the local frame to detach.</span>
+&nbsp; <span class="hljs-keyword">if</span> (!LocalRootImpl())
+&nbsp; &nbsp; <span class="hljs-keyword">return</span>;
+
+
+&nbsp; GetPage()-&gt;GetValidationMessageClient().LayoutOverlay();
+}
+</pre><p>关键就是在第一处注释那里：为了确保hover <span class="hljs-keyword">state</span>计算正确，将会在layout change之后重新执行相关逻辑。下面的代码中RecomputedMouseHoverStateIfNeeded()方法中会触发mouseenter事件。据此我们可以得到如下猜测：布局改变，为了hover等状态正确实现，将会重新计算hover state，这期间触发了mouseenter。也就是说，当布局改变时，会重新计算一下布局改变区域内鼠标位置，和鼠标位置相关元素上的mouseenter事件会被触发，这是因为mouseenter的实现原理造成的。(略微说明一下，事实上浏览器计算hover或者mouseenter事件都基本是一个思路：鼠标移动的时候判断鼠标位置，当鼠标位置和某个元素重合，或者边界区域发生运动时，触发对应地事件)。我们是否可以通过前端来观察到这个过程，或者初步验证我们的结果？答案是可以，利用浏览器调试工具中的performance：</p><p><img src="https://www.im6767.top/articlePlates/1611670036417.png"></p><p>是不是和我们的推断很一致呢？那我们组织语言，可以对以上问题得到这样一个总结：<strong>当发生布局改变时，浏览器会在必要的情况下重新计算hover state，这导致相关联元素上如果绑定了mouseenter事件，将会被浏览器触发。</strong>如果感兴趣，你可以在body等元素上都绑定mouseenter事件，会发现他们将会被依次触发。而且他们的触发也会有先后顺序。这里卖个关子，大家可以写代码自己测试一下，至于为什么先后顺序是这样，实际上没有太多意义，不过源码会回答你这个问题:D</p><h2>结束吧</h2><p>事实上，这个问题到底是不是一个BUG呢？笔者个人观点依旧认为这是一个BUG。因为从主观认知来讲，鼠标确实始终没有离开目标元素，所以根本不存在再次进入元素的说法，也就不应该触发mouseenter了。令人遗憾的是，当笔者准备去chrome提交BUG的地方进行询问时，被告知需要注册google账号，但是我的手机号无法收到验证码。事实上笔者一开始就打算提个问题问问，但是由于没办法注册账号，才走上了源码这条路，但是最后发现还是需要有人解答这个问题。是时候通过其他渠道获取一个谷歌账号，问问这个问题了，或许自己真的是这个问题的第一个提出者。</p><p>另外，比起上面BUG的追踪，更让我感慨的是chrome源码的魅力。笔者是一个C++纯菜鸟，能力只能达到读读代码的程度，但是在chrome这个庞大的项目上的阅读，反而没有感受到太大的压力。比起chrome这个项目，自己平时构建的代码简单的如同玩具。站在巨人的肩膀上，愈发感觉到自己的渺小和无知。希望自己有足够的时间、能力和精力，打破浏览器构筑的环境壁垒，进入到浏览器的内部，来看看我们熟知的各种API更为底层的实现。</p><p><br></p>

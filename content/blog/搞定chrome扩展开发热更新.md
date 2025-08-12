@@ -1,0 +1,70 @@
+---
+title: '搞定chrome扩展开发热更新'
+summary: '如果你要开发chrome扩展，那么随着功能的庞大，你的体验会直线下降——依赖于chrome的本地文件系统的插件文件无法热更新，你可能需要不断的刷新，重新打开扩展。不过当你看到这篇文章时，以上问题就不存在了。'
+date: 2022-04-27
+---
+<p>似乎有好一段时间没有更新过新的文章，笔者这段时间终于迈出了久违的一步，从之前的舒适圈里跳了出来。前一段时间也是各种奔波忙碌，中间经过了一段短暂时间的休息，然后进入了新的工作状态。生活还是要前进前进，文章还是要更新更新。话不多说进入正题。</p><h2>起因</h2><p>进入新的工作岗位，经过短暂的工作环境熟悉之后，上手了第一个小任务——对公司开发的一个浏览器插件进行功能维护。当然这也是我第一次写chrome的扩展，好在有之前的代码，功能逻辑梳理清楚之后，在指定的位置进行代码添加即可。</p><p>写代码当然是要经历调试和修改的，是一个不断调整的过程。笔者这里不详细介绍如何进行浏览器扩展开发，只对它的加载方式进行说明：在chrome扩展页面中，开启开发者模式，然后选择<strong>"加载已解压的扩展程序"</strong>，选择你开发插件完整的目录（需要包含HTML，JS，CSS，图片等文件），这是一个指向本地的文件路径，此时就可以在扩展中看到自己的插件了。</p><p>第一个面临的问题出现了：如果要进行插件的开发，那意味着要不断的进行打包，将结果写入指定目录，例如dist，然后在浏览器插件管理页面刷新指定插件，让它读取到最新的文件，然后再打开插件，这听起来真的很糟糕。</p><h2>优美一点</h2><p>以上的问题迟早会让你感到绝望。你要不断的去打包文件，刷新插件，然后观看成果，如果有问题，再次修改，打包，刷新插件，观看成果，然后重复这个步骤。</p><p>顺便说一句，笔者面对这个问题时，整个项目搭建是Webpack + React。</p><p>能想到的最简单的方式是什么？对，利用watch去监听开发目录，如果有文件变动自己去进行打包，然后手动刷新插件，观看成果。</p><p>是的，你解放了一点点自己的工作：你不再需要手动打包了，少了一个步骤。不过当你的项目变得庞大，文件变得多起来的时候，痛苦是加倍的：打包消耗的时间太长了，如果你比较频繁的改动某个功能，你花在修改上的时间可能只需要数秒钟，但是打包却消耗数十秒，基本没有开发体验。</p><h2>再优美一点</h2><p>能不能更好？答案肯定是可以的。通常webpack在开发模式中，会提供一个本地服务器，webpack的配置中，devServer下面的devMiddleware提供了一个配置项：</p><pre class="ql-syntax" spellcheck="false">module.exports = {<span class="hljs-string">devServer:</span> {<span class="hljs-string">devMiddleware:</span> {<span class="hljs-string">index:</span> <span class="hljs-literal">true</span>,<span class="hljs-string">mimeTypes:</span> { <span class="hljs-string">phtml:</span> <span class="hljs-string">'text/html'</span> },<span class="hljs-string">publicPath:</span> <span class="hljs-string">'/publicPathForDevServe'</span>,<span class="hljs-string">serverSideRender:</span> <span class="hljs-literal">true</span>,<span class="hljs-comment">/* 就是这个, 将文件写入磁盘 */</span>﻿
+<span class="hljs-symbol">      writeToDisk:</span> <span class="hljs-literal">true</span>,},},
+};﻿
+</pre><p>在webpack的热更服务中，生成的文件是在内存中的，而通过writeToDisk则可以将内存中的文件写入到磁盘中。一个新的思路诞生了：通过开启这个配置，将文件写入到磁盘内，然后让插件的位置指向写入的文件路径。</p><p>在这种情况下，我们既能够享受热更本身带来的加载优化，也能够达到我们的目的。我们不再需要去写watch监听目录，因为这一切webpack已经帮我们做好了。开发似乎变得优美了起来：不写代码，效率更高。</p><h2>还不够</h2><p>尽管比起一开始的开发，我们似乎已经舒服了不少，但是整个开发过程仍然让人抓狂：</p><ol><li>webpack虽然好用，但是它的热更新效率可不怎么样，你有试过有很多包的项目开发吗？热更的效率绝对会让你感到绝望。（当然它某种程度上提高了开发人员的幸福程度，毕竟在热更的时候，你完全可以摸鱼）</li><li>文件写入了磁盘，但是插件并不知道文件发生了更新，我们仍然需要手动刷新插件才可以让它获取到最新的内容，愚蠢。</li></ol><p>我们需要继续思考一下如何解决这个问题。</p><h2>逐个解决，再快一点</h2><p>我们当然可以优化webpack的热更效率，但是笔者不会这么做。优化webpack的热更效率是一个比较麻烦的工作，而且所得到的提升远不及自己的预期。</p><p>笔者推荐使用vite。</p><p><img src="https://www.im6767.top/articlePlates/1651114601663.jpg"></p><p>作为下一代前端开发与构建工具，vite一个很重要的特性就是极高的热更新效率，因为它基于浏览器本身对module模式的支持和底层的esbuild的快速。如今的vite已经不新鲜了，它也在不断壮大，并且对主流的技术框架都有了完美的支持。</p><p>那么我们不妨直接使用vite！</p><h2>我不想要手动刷新了</h2><p>我们开始想办法解决第二个问题。分析原因其实很容易知道，在前端开发中的热更新工作都是在一个"服务"中完成的，大致原理就是在服务和前端页面之间建立双向通信，发生文件更改之后，将修改信息推至前端，前端页面进行相对应的替换更新。</p><p>但是我们的插件不是基于一个服务，而是基于本地文件系统，所以二者无法集成。</p><p>搜索资料能够发现，很多人都想到了一个方式：在文件中自己构建一个webSocket服务，和启动的服务建立通信，当本地文件发生更改之后，调用浏览器为扩展提供的刷新方法，整个刷新插件，达到实时更新的目的。</p><p>99.999999%的人认为很酷，市面上通用的解决方案都是这个方案的变种，人们在欢呼终于解决了这个问题，但是它仍然有一点点不能算是小问题的问题：</p><ol><li>文件更新之后，整个插件文件是整体刷新的，相当于页面进行了reload。我们可能会丢失很多信息，例如你的扩展中有很多页面，你需要进入首页拿到信息，再进入菜单拿到权限，再进入你修改的页面进行调试，但是当你修改了你页面中的一个小部分之后，你的页面重新加载了，你仍然需要进入首页拿到信息，再进入菜单拿到权限，再进入你的修改页面......假如你调试的是一个复杂的表单，你可能需要先填写数十个筛选项，这样的刷新之后你又要重新开始。</li><li>我们刚刚解决的热更效率的问题，在这样的模式下瞬间破灭了：因为vite的快速一个很大的原因就是只会加载所需要的部分，而不是整体先进行加载，所以当我们启动一个vite服务之后，它实际上一开始什么都不会生成。一方面vite本身不提供将模块写入本地文件的方式，另一方面也没法提供，因为文件不使用的时候不会生成，连vite也不知道要生成什么。</li></ol><p>第二个问题实际上是有解的，即然webpack提供写入磁盘的能力，vite也可以通过插件。你完全可以通过自己完成一个插件，将文件写入到磁盘里。这个动作可以在本地服务器返回文件的时候完成，因为只有在请求收到之后，vite才会进行构建，然后返回结果。那如何请求呢？你可以有另一个服务，向vite服务发送请求......</p><p>我不再喜欢这个方案了，为了一个小问题，我们可能会遇到更多的问题。我们引入的工具越来越多，但是都不能完美和问题契合。</p><h2>代理</h2><p>那么如何能完成这样一个工作：看起来是在请求一个文件，但是实际上请求的是另一个文件？</p><p>在这个实际场景中，就是如何能看起来是在请求本地的文件系统中的文件，但是实际上请求的是vite服务中的同名文件？</p><p>很容易想到这就是"代理"的功能。我想到了Fiddler，很常用的具有代理功能的工具，不顾我没有尝试使用Fiddler，所以我不确定它能不能捕捉到chrome发送给本地文件系统中的请求，如果可以捕捉到，那么完全可以让它指向vite服务中的同名文件。</p><p>我没有使用Fiddler的原因是，Fiddler是一个单独的应用，是不可控的。你在使用工具的时候，如果有另一个人告诉你，你用我的工具时，必须使用另一个工具，而他根本不知道你会不会使用另一个工具，这产生了工具依赖的强耦合。</p><p>在进行扩展的调试时，我发现事实上它就是一个在特殊作用环境内的普通前端页面，那么是不是普通的浏览器API在内部也是同样生效的呢？我想到了serviceWorker这个天然的可编程前端代理。</p><h2>开始实现</h2><p>我们利用vite的脚手架工具创建一个初始的react项目，以便测试。首先我们启动项目后，将启动生成的html文件拉取下来，创建成为我们自己的html文件，让扩展读取这一份html文件，它大致长这个样子：</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-meta">&lt;!DOCTYPE html&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">html</span> <span class="hljs-attr">lang</span>=<span class="hljs-string">"en"</span>&gt;</span>
+ <span class="hljs-tag">&lt;<span class="hljs-name">head</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">script</span> <span class="hljs-attr">type</span>=<span class="hljs-string">"module"</span> <span class="hljs-attr">src</span>=<span class="hljs-string">"/@vite/client"</span>&gt;&lt;/<span class="hljs-name">script</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">script</span> <span class="hljs-attr">type</span>=<span class="hljs-string">"module"</span>&gt;</span>
+        <span class="hljs-keyword">import</span> RefreshRuntime <span class="hljs-keyword">from</span> <span class="hljs-string">"/@react-refresh"</span>
+        RefreshRuntime.injectIntoGlobalHook(<span class="hljs-built_in">window</span>)
+        <span class="hljs-built_in">window</span>.$RefreshReg$ = <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> {}
+        <span class="hljs-built_in">window</span>.$RefreshSig$ = <span class="hljs-function"><span class="hljs-params">()</span> =&gt;</span> <span class="hljs-function">(<span class="hljs-params">type</span>) =&gt;</span> type
+        <span class="hljs-built_in">window</span>.__vite_plugin_react_preamble_installed__ = <span class="hljs-literal">true</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">script</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">meta</span> <span class="hljs-attr">charset</span>=<span class="hljs-string">"UTF-8"</span> /&gt;</span>
+    ﻿<span class="hljs-tag">&lt;<span class="hljs-name">link</span> <span class="hljs-attr">rel</span>=<span class="hljs-string">"icon"</span> <span class="hljs-attr">type</span>=<span class="hljs-string">"image/svg+xml"</span> <span class="hljs-attr">href</span>=<span class="hljs-string">"/src/favicon.svg"</span> /&gt;</span>
+    ﻿<span class="hljs-tag">&lt;<span class="hljs-name">meta</span> <span class="hljs-attr">name</span>=<span class="hljs-string">"viewport"</span> <span class="hljs-attr">content</span>=<span class="hljs-string">"width=device-width, initial-scale=1.0"</span> /&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">title</span>&gt;</span>Vite App<span class="hljs-tag">&lt;/<span class="hljs-name">title</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">head</span>&gt;</span>
+﻿<span class="hljs-tag">&lt;<span class="hljs-name">style</span>&gt;</span>
+    <span class="hljs-comment">/* 撑开扩展展示的页面 */</span>
+    body, html {
+      <span class="hljs-attribute">width</span>: <span class="hljs-number">350px</span>;
+      <span class="hljs-attribute">height</span>: <span class="hljs-number">500px</span>;
+    }
+<span class="hljs-tag">&lt;/<span class="hljs-name">style</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">body</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"root"</span>&gt;&lt;/<span class="hljs-name">div</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">script</span> <span class="hljs-attr">type</span>=<span class="hljs-string">"module"</span> <span class="hljs-attr">src</span>=<span class="hljs-string">"/src/main.tsx"</span>&gt;&lt;/<span class="hljs-name">script</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">body</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">html</span>&gt;</span>
+</pre><p>为了能够让文件访问到我们的资源路径，我们在所有的script标签src前加上我们的服务前缀。vite默认的端口号是3000，所以我们全部添加上http://localhost:3000。这里需要注意的是，中间有一个内联的脚本，脚本中from了/@react-refresh，我们也要为它加上前缀，变成import xxx from "http://localhost:3000/@react-refresh"。</p><p>接着我们要添加我们的serviceWorker脚本。笔者构建了injection.js，在html页面中进行引入，injection.js内部代码如下：</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-comment">// injection.js﻿</span>
+<span class="hljs-keyword">if</span> (<span class="hljs-string">'serviceWorker'</span> <span class="hljs-keyword">in</span> navigator) {
+  <span class="hljs-comment">/* 当页面加载完成就创建一个serviceWorker */</span><span class="hljs-built_in">window</span>.addEventListener(<span class="hljs-string">'load'</span>, <span class="hljs-function"><span class="hljs-keyword">function</span> () </span>{
+      <span class="hljs-comment">/* 创建并指定对应的执行内容 *//* scope 参数是可选的，可以用来指定你想让 service worker 控制的内容的子目录。 在这个例子里，我们指定了 '/'，表示 根网域下的所有内容。这也是默认值。 */</span>
+      navigator.serviceWorker.register(<span class="hljs-string">'./serviceWorker.js'</span>, {<span class="hljs-attr">scope</span>: <span class="hljs-string">'./'</span>})
+          .then(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">registration</span>) </span>{
+              <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'ServiceWorker registration successful with scope: '</span>, registration.scope);
+          })
+          .catch(<span class="hljs-function"><span class="hljs-keyword">function</span> (<span class="hljs-params">err</span>) </span>{
+              <span class="hljs-built_in">console</span>.log(<span class="hljs-string">'ServiceWorker registration failed: '</span>, err);
+          });
+      });
+  }
+</pre><p>然后我们要构建我们的serviceWorker。这里不再进行详细的解释serviceWorker的工作原理和开发，直接上代码：</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-regexp">//</span> serviceWorker.js
+<span class="hljs-keyword">this</span>.addEventListener(<span class="hljs-string">'install'</span>, function (event) {
+  <span class="hljs-built_in">console</span>.log(<span class="hljs-string">"install success!"</span>)
+});
+
+<span class="hljs-keyword">this</span>.addEventListener(<span class="hljs-string">'fetch'</span>, <span class="hljs-function"><span class="hljs-params">(event)</span> =&gt;</span> {
+  let matchList = event.request.url.match(<span class="hljs-regexp">/chrome-extension:\/\/flacfclehibkcmeecdfhnpndcfegamek\/(.*)/</span>)
+  <span class="hljs-keyword">if</span> (matchList &amp;&amp; matchList[<span class="hljs-number">1</span>].indexOf(<span class="hljs-string">"index.html"</span>) === - <span class="hljs-number">1</span>) {
+    <span class="hljs-built_in">console</span>.log(event.request.url)
+    requestContent = <span class="hljs-string">"http://localhost:3000/"</span> + matchList[<span class="hljs-number">1</span>];
+    event.respondWith(
+      fetch(requestContent).<span class="hljs-keyword">then</span>(<span class="hljs-function"><span class="hljs-params">(res)</span> =&gt;</span> {
+        <span class="hljs-keyword">return</span> res;
+      }).<span class="hljs-keyword">catch</span>(<span class="hljs-function"><span class="hljs-params">(err)</span> =&gt;</span> {
+        <span class="hljs-built_in">console</span>.log(err)
+      })
+    )
+  }
+})
+</pre><p>代码很简单，所做的事情就是拦截请求，然后匹配request的url，将其转向http://localhost:3000，得到结果后返回给前台请求。这里的chrome-extension: xxxxx取决于你的插件编号，自行替换即可，或者你也可以改成更为通用的正则匹配形式。</p><p>基本的代理功能就完成了。接下来看看效果。</p><p><img src="https://www.im6767.top/articlePlates/1651201574430.jpg"></p><p>空白一片！切入控制台看看错误：</p><blockquote>Refused to execute inline script because it violates the following Content Security Policy directive: "script-src 'self' http://localhost:3000/". Either the 'unsafe-inline' keyword, a hash ('sha256-HXMlWsq+oNLZssobp+7fA5nLeXdM2SRYQaP17p5P6Ws='), or a nonce ('nonce-...') is required to enable inline execution.</blockquote><p>翻译一下就是，我们在页面中通过script直接内联写入的脚本是不允许执行的，除非设置允许。chrome扩展的安全规则更为严格，所以我们需要进行对应的配置。</p><p>接下来你可能会遇到第一个坑：按照错误提示，你可以设置unsafe-inline，特定的hash值，或者nonce-特定的编号。即然脚本都是自己写的，我们直接设置unsafe-inline，允许内部所有的内联脚本执行就行。</p><p>然后你就会发现无效。查询了很多资料之后，在一个老外的回答中得知，在扩展中，从某个特定的chrome浏览器版本开始，扩展不再支持unsafe-inline，但是报错信息中没有剔除，所以为了保险起见，你需要使用后面的形式。笔者这里使用hash值，添加进manifest.json。</p><pre class="ql-syntax" spellcheck="false">  "content_security_policy": "<span class="hljs-keyword">script-src</span> <span class="hljs-string">'self'</span> http://localhost:3000/ <span class="hljs-string">'sha256-HXMlWsq+oNLZssobp+7fA5nLeXdM2SRYQaP17p5P6Ws='</span>; <span class="hljs-keyword">object-src</span> <span class="hljs-string">'self'</span>;<span class="hljs-keyword">img-src</span> http://localhost:3000"
+</pre><p>注意，这个hash值是根据内联代码计算出来的，如果你的内联代码产生了变动，就会生成新的hash值，你需要在这里进行对应的替换。所以如果你的内联脚本可能发生变化，那非常建议使用nonce-特定编号的形式，具体请自行查阅Content-Security-Policy这个html的属性。</p><p>添加完毕之后，我们重新加载插件，再次看看效果：</p><p><img src="https://www.im6767.top/articlePlates/1651203330310.jpg"></p><p>首先查看我们serviceWorker，很幸运，它正确安装了，然后我们再试试我们的插件页面：</p><p><img src="https://www.im6767.top/articlePlates/1651203454553.jpg"></p><p>也已经能够正确展示了，那热更新如何呢？</p><p>bingo!到此为止，我们完成了我们想要的功能。<img src="https://www.im6767.top/articlePlates/1651204395493.gif"></p><h2>观察并思考</h2><p>综上来看，我们的功能已经和预想中的一样了，不过似乎还是有一些地方不够方便，值得改进：</p><ol><li>我们要手动扒拉启动后的html文件，它不能够“自动生成”，虽然它是很少改变的，但是仍然有改变的可能，我不喜欢这个手动的过程。</li><li>无法预测的内联脚本。实际上我们项目中提供的基本的html只有一个，也就是index.html，他内部只有一个src/main.tsx的脚本引入。然而我们从生成的服务中获取到的index.html中有不少的内联脚本，这些内联脚本大多是由框架生成的，比如示例代码中的内联脚本，可能会生成哪些内联脚本这件事情也无法预测，并且内联脚本的使用又有很多安全限制，这一定程度上增加了变动的可能性，我们可能要注意观察生成的服务中获取到的index.html是不是包含了更多的其他内容，否则就要修改它。</li></ol><p>其实面对以上的问题笔者也尝试过一些方案：例如上面提到的内联脚本的改动，笔者想利用plugin去修改插入dom中的内容，但是没有成功，对内部代码流程进行追踪之后发现，vite中插件对于html的修改，如果是以数组或者对象的形式处理，后续处理的插件是无法获取到前一个组件的结果的，所以无法修改。另外关于路径的某些配置，在整个插件内部是被写死的，也没有办法很好的处理，所以都没有找到很美好的解决方案。</p><h2>写在最后</h2><p>至此，我们关于chrome扩展的带热更开发功能的设计与实现基本就结束了，至于它的意义，就是以一种可行的新的方式来提升chrome扩展开发的效率，而这种方式相较于网络上广为流传的提效版本更加优秀，它拥有更小的构建改动和更优的使用开发体验。其思路和开发的关键点就是使用serviceWorker进行中转代理。</p><p>不过，在实际的开发中，笔者需要面临的问题更多，如何将旧的代码迁移至新的模式中，如何对各种功能点进行重新的测试和覆盖，如何保证在现有代码构建中工具的使用没有任何问题？尽管仍然有上面这些问题，但是它带来的便捷性还是值得肯定和借鉴的。</p>

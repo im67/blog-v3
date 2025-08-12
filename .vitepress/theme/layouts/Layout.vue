@@ -1,16 +1,28 @@
 <script lang="ts" setup>
+import { useRoute } from 'vitepress';
+import ListPage from './page/ListPage.vue'
+import BlogPage from './page/BlogPage.vue'
+
+const route = useRoute()
+
+const CurrentPage = computed(() => {
+    return route.path.startsWith('/content/blog/')
+        ? BlogPage
+        : ListPage
+})
 
 </script>
 
 <template>
-    <div class="w-screen h-screen">
-        <div v-if="$slots['sidebar']">
-            <slot name="sidebar">
-                
-            </slot>
+    <div class="w-screen h-screen flex">
+        <div v-if="$slots['sidebar']" class="hidden lg:block">
+            <slot name="sidebar"></slot>
         </div>
-        <div>
-            <slot name="main">4455</slot>
+        <div class="flex flex-col grow overflow-hidden">
+            <slot name="header"></slot>
+            <slot name="main">
+                <component :is="CurrentPage" class="grow overflow-auto" id="main" :key="CurrentPage.name" />
+            </slot>
         </div>
     </div>
 </template>

@@ -5,19 +5,34 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "docs:dev": "vitepress dev",
+    "docs:dev": "vitepress dev --host",
     "docs:build": "vitepress build",
-    "docs:preview": "vitepress preview"
+    "docs:preview": "vitepress preview",
+    "gen": "node ./scripts/generateMd.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@tailwindcss/line-clamp": "^0.4.4",
+    "@types/d3": "^7.4.3",
+    "@types/lodash-es": "^4.17.12",
+    "mysql2": "^3.14.3",
+    "sass-embedded": "^1.89.2",
+    "unplugin-auto-import": "^19.3.0",
     "vitepress": "^1.6.3"
   },
   "dependencies": {
+    "@tabler/icons-vue": "^3.34.1",
     "@tailwindcss/vite": "^4.1.7",
+    "@vueuse/components": "^13.3.0",
+    "@vueuse/core": "^13.3.0",
+    "d3": "^7.9.0",
+    "dayjs": "^1.11.13",
+    "highlight.js": "^11.11.1",
+    "lodash-es": "^4.17.21",
     "tailwindcss": "^4.1.7",
+    "viewerjs": "^1.11.7",
     "vue": "^3.5.14"
   }
 }

@@ -1,0 +1,190 @@
+---
+title: 'Vue3服务端渲染不完全指北'
+summary: '距离上次使用Vue3改造博客已经过去了三四个月，Vue3也经过alpha和rc发布了稳定且正式的版本。博客的服务器配置本身就低，白屏时间确实长的有那么点难受，那不妨试着搞搞SSR，提升下读者体验，也顺道迎合一下SEO。'
+date: 2020-11-24
+---
+<h2>不堪回首的过往</h2><p>年初博客起步时，心中怀有美好的向往。上帝说，要有光，于是便有了光。可惜我不是上帝，我说要有这样那样的功能，它不会立即就有这样那样的功能。一年下来，博客还是只能写写文章，功能没多大变化，折腾倒是折腾了不少，从Vue2.x到uni-app又到Vue3，这一路心酸旅程这里不再详述，等正儿八经年终小总结的时候再聊聊。无数次想过不如推倒重来，直到有一天看到一篇文章说，程序员不应该是一个完美主义者，这才打消了脑海中的"蠢念头"。临近年关的11月，在Vue3发布了稳定版本一段时间之后，决定把项目用TypeScript重写，顺带改造成SSR。没有丰富的功能，先把底子打好再说。尽管整个过程没有那么顺利，但是最后还是完成了。告一段落的这几天，觉得还是应该记录下整个过程中爬过的坑，和一些自己的疑问点，以免自己再次掉进同样地坑中。</p><h2>准备工作</h2><p>俗话说，工欲善其事，必先利其器。在开始之前，准备工作必不可少。说起服务端渲染，可能首先你要知道服务端渲染是什么，当然，当你决定要进行服务端渲染的时候，你肯定已经了解过服务端渲染的相关概念。关于服务端渲染的改造事宜，我们可以在Vue文档中找到对应的<a href="https://cn.vuejs.org/v2/guide/ssr.html" rel="noopener noreferrer" target="_blank">说明内容</a>，Vue提供了一份全面但不那么涉及到技术细节的服务端渲染指南（后文统称指南），尽管它使用的是"非常深入"四个字来形容本指南。指南首先说明了服务端渲染带来的收益和必须付出的代价，且给出了一些场景下的其它解决方案，请确保认真阅读，再决定是否进行SSR。</p><p><img src="https://www.im6767.top/articlePlates/1606390478828.png"></p><p>请注意，如果你想要的是更加平滑和流畅的服务端构建体验，那么使用Vue官网推荐的工具将是更合适的选择（这点我非常坚信），那么此时你就应该关掉本文，然后开始学习Nuxt.js或者Quasar，或者其他框架。但是很不幸，就如同本文的标题一样，我们采用的是Vue3，在本文截止前，似乎并没有知名的通用框架支持Vue3，他们都处于过渡阶段。所以我们不得不选择从头搭建。尽管重头搭建带来的收益可能会更大，你可能会感觉到更自由，但是过程中你可能面对很多未知，所以，当你在犹豫到底使用通用框架，还是重头开始时，请选择通用框架，毕竟快乐才是生活意义。</p><p>指南中标注了进行服务端渲染所需要的具备的版本条件，注意它给出的是最低版本。Vue3当然高于Vue2.3，但是这恰恰意味着它不一定能用。Vue2.x对应地一些公共插件在Vue3的版本中都会标注next字样，例如vue-router-next，表明这是支持Vue3的版本。后两者都有对应地版本，但是vue-server-renderer这个插件没有。这意味着Vue3的服务端改造并不能使用该插件(当然你也可以尝试一下，会弹出警告：该插件需要的Vue版本是2.3+但是当前Vue的版本是3.0.2，别问我怎么知道的，问就是刚爬出来过)。</p><p><img src="https://www.im6767.top/articlePlates/1606391530867.png"></p><p>好在尤大在Vue3的互动视频中提到过，Vue3使用的是内置的<a href="https://github.com/vuejs/vue-next/tree/master/packages/server-renderer#readme" rel="noopener noreferrer" target="_blank">@vue/server-renderer</a>进行服务端渲染解析。所以我们拥有类似的解决方案，而且可能更好。既然是服务端渲染，我们当然还要选择一个服务端技术。这个不怎么重要，笔者在这里选择了Koa2。具有了基本的技术理解和工具，接下来需要做的就是按照指南的步骤，开始SSR的相关工作。由于指南是针对Vue2.x，所以同构道路上的障碍，应该就是指南和现实之间的差异解决。</p><h2>开始Coding</h2><p>因为我是已经有一个完整的Vue小项目，所以更像是SSR改造。服务端渲染的Vue app更像是同构，代码可以在服务端和客户端同时使用。首先需要明确的一个概念是，在客户端，资源是运行在每个浏览器上的，所以每一个Vue都是一个单独的实例，这没有什么问题。但是服务端渲染则不同，因为所有的服务请求都是由服务器处理的，当你服务运行时，所有的请求都由服务端完成，如果依旧以客户端的形式进行代码构建，那意味着每个请求都对应一个共同的实例，这显然是错误的，会发生实例污染（因为不同的请求导致状态混乱）。所以对于服务端渲染来讲，所有在一个app中使用的公共状态都应该为每一次请求创建一个实例。指南中的做法是提供公用的app.js，里面包含的是一个工厂函数，用于返回实例，然后建立client-entry.js和server-entry.js。个人开发来讲并没有这么做。在2.x版本中，我们使用new Vue({···})创建实例，Vue3中则是使用createApp的形式，所以我们只是建立了main.client.ts和main.server.ts两个入口文件，为客户端/服务端构建编写不同的代码。代码大致如下(注意，仅为代码片段，供说明使用)。</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-comment">//main.client.ts</span>
+<span class="hljs-keyword">import</span>&nbsp;{&nbsp;createApp&nbsp;}&nbsp;<span class="hljs-keyword">from</span>&nbsp;<span class="hljs-string">'vue'</span>
+<span class="hljs-keyword">import</span>&nbsp;App&nbsp;<span class="hljs-keyword">from</span>&nbsp;<span class="hljs-string">'./App.vue'</span>
+<span class="hljs-keyword">import</span>&nbsp;routerFactory&nbsp;<span class="hljs-keyword">from</span>&nbsp;<span class="hljs-string">'./routers'</span>
+<span class="hljs-keyword">const</span>&nbsp;app&nbsp;=&nbsp;createApp(App);
+<span class="hljs-keyword">let</span>&nbsp;theRouter:Router&nbsp;=&nbsp;routerFactory(<span class="hljs-literal">false</span>)
+app.use(theRouter);
+theRouter.isReady().then(<span class="hljs-function"><span class="hljs-params">()</span>&nbsp;=&gt;</span>&nbsp;{
+&nbsp;&nbsp;app.mount(<span class="hljs-string">'#app'</span>,&nbsp;<span class="hljs-literal">true</span>);﻿
+})
+
+<span class="hljs-comment">//main.server.ts</span>
+<span class="hljs-keyword">import</span>&nbsp;{&nbsp;Component,&nbsp;createSSRApp&nbsp;}&nbsp;<span class="hljs-keyword">from</span>&nbsp;<span class="hljs-string">'vue'</span>
+<span class="hljs-keyword">import</span>&nbsp;App&nbsp;<span class="hljs-keyword">from</span>&nbsp;<span class="hljs-string">'./App.vue'</span>;
+<span class="hljs-keyword">import</span>&nbsp;routerFactory&nbsp;<span class="hljs-keyword">from</span>&nbsp;<span class="hljs-string">'./routers'</span>
+<span class="hljs-keyword">export</span>&nbsp;<span class="hljs-keyword">default</span>&nbsp;<span class="hljs-keyword">async</span>&nbsp;(context:&nbsp;<span class="hljs-built_in">any</span>)&nbsp;=&gt;{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;app&nbsp;=&nbsp;createSSRApp(App);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;router&nbsp;=&nbsp;routerFactory(<span class="hljs-literal">true</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;store:&nbsp;<span class="hljs-built_in">any</span>&nbsp;=&nbsp;storeFactory();
+&nbsp;&nbsp;&nbsp;&nbsp;sync(store,&nbsp;router);
+&nbsp;&nbsp;&nbsp;&nbsp;app.use(router);
+&nbsp;&nbsp;&nbsp;&nbsp;app.use(store,&nbsp;key);
+&nbsp;&nbsp;&nbsp;&nbsp;app.provide(stateSymbol,&nbsp;createState());
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">await</span>&nbsp;router.push(context.url);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">await</span>&nbsp;router.isReady();
+        <span class="hljs-keyword">return</span>&nbsp;app;
+}
+</pre><p>对于客户端来讲，就是创建了一个单独的实例，对于服务端来讲，暴露出的是一个函数，每当执行这个函数时，都会有新的实例被创建。你应该注意到了，客户端渲染使用的是createSSRApp方法。这其实并没有体现出工厂函数。在上述代码中，我们创建路由时使用了routerFactory，这是一个典型的工厂函数，它的实现是这样的：</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-keyword">import</span>&nbsp;{&nbsp;createRouter,&nbsp;createMemoryHistory,&nbsp;createWebHistory}&nbsp;<span class="hljs-keyword">from</span>&nbsp;<span class="hljs-string">'vue-router'</span>
+<span class="hljs-keyword">export</span>&nbsp;<span class="hljs-keyword">default</span>&nbsp;<span class="hljs-function"><span class="hljs-keyword">function</span>&nbsp;<span class="hljs-title">routerFactory</span>(<span class="hljs-params">isServer:&nbsp;Boolean</span>)&nbsp;</span>{&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;createRouter({
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">routes</span>:&nbsp;[<span class="hljs-comment">/*your routes*/</span>],
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">history</span>:isServer&nbsp;?&nbsp;createMemoryHistory()&nbsp;:&nbsp;createWebHistory()
+        })
+</pre><p>可以看到，每次执行，该工厂函数都会返回一个新的路由实例。再结合上面两个入口函数，如果你理解服务端渲染造成的状态污染，那工厂函数的作用你也能够轻易理解。与Vue2.x除了路由创建的不同，vue-router4(我更喜欢vue-router-next这个叫法)新增加了一种模式memoryHistory。关于vue-router的文档中指明，该模式就是为了SSR而创建的。</p><p><img src="https://www.im6767.top/articlePlates/1606401075488.png"></p><p>出于好奇我也在构建过程中使用了一下memoryHistory这个模式。众所周知，hash模式表现为浏览器地址栏地址后跟上#的形式，而history模式则是利用historyAPI进行路由变化，每次改变时都能看到地址栏的地址变化。而memoryHistory则像是“内存中的history”模式。当你进入/回退路由时，一切都表现得和正常一样，但是你看不到地址栏的地址变化。所以我们的路由工厂函数接收一个Boolean的入参，来为客户端创建history模式的路由，而为服务端创建memoryHistory模式的路由。</p><p>到这里我们基本介绍完毕了代码构建的一些组织形式和注意事项。总体来看，区别就是，考虑到服务端渲染，我们的代码就不能只顾及客户端，而是要结合服务端渲染一些特点进行改造。本文非详尽的SSR改造教程，而只是介绍Vue3的SSR和指南中的一些异同点和大致流程。如果和指南对照，我们已经完成了"通用代码的组织"，"源码及目录结构处理"，"vue-router的创建使用"三个部分，其它未介绍事宜基本与指南中一致，如代码的分割、服务端渲染的一些特殊情况处理等。所以如果你旨在参考本文进行服务端改造，请务必结合<a href="https://ssr.vuejs.org/zh/guide/routing.html" rel="noopener noreferrer" target="_blank">指南</a>进行改造处理。</p><h2>转向服务端</h2><p>按照指南，接下来要处理数据的预取和状态。经过上面的路由改造和通用代码的构建，已经具备了渲染静态页面的大致条件，不妨搭建起服务，看看服务端渲染的雏形。这一部分大致与指南中“bundle Renderer指引”章节对应。也就是说我们将这部分内容提前与数据预取进行处理。服务端搭建笔者采用koa2，你当然可以采用express，采用nest，采用egg。服务端渲染对于node生态下的服务端几乎没有要求。</p><p>在项目目录下建立server目录，将服务端相关代码部署在server下，关键代码如下：</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-keyword">const</span>&nbsp;path&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">"path"</span>);
+<span class="hljs-keyword">const</span>&nbsp;Koa&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">"koa"</span>);
+<span class="hljs-keyword">const</span>&nbsp;koaStatic&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">'koa-static'</span>);
+<span class="hljs-keyword">const</span>&nbsp;{&nbsp;renderToString&nbsp;}&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">"@vue/server-renderer"</span>);
+<span class="hljs-keyword">const</span>&nbsp;fs&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">"fs"</span>)
+<span class="hljs-keyword">const</span>&nbsp;manifest&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">"../dist/server/ssr-manifest.json"</span>);
+<span class="hljs-keyword">const</span>&nbsp;server&nbsp;=&nbsp;<span class="hljs-keyword">new</span>&nbsp;Koa();
+<span class="hljs-keyword">const</span>&nbsp;appPath&nbsp;=&nbsp;path.join(__dirname,&nbsp;<span class="hljs-string">"../dist/server"</span>,&nbsp;manifest[<span class="hljs-string">"app.js"</span>]);
+<span class="hljs-keyword">const</span>&nbsp;templateHTML&nbsp;=&nbsp;fs.readFileSync(path.join(__dirname,&nbsp;<span class="hljs-string">"../dist/client"</span>,&nbsp;<span class="hljs-string">"server.index.html"</span>),&nbsp;<span class="hljs-string">"utf-8"</span>);
+<span class="hljs-keyword">const</span>&nbsp;serverApp&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(appPath).default;
+server.use(koaStatic(<span class="hljs-string">"./dist/client"</span>));
+server.use(
+&nbsp;&nbsp;koaStatic(path.join(__dirname,&nbsp;<span class="hljs-string">"../dist"</span>,&nbsp;<span class="hljs-string">"favicon.ico"</span>))
+);
+server.use(<span class="hljs-keyword">async</span>&nbsp;(context,&nbsp;next)=&gt;{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;app&nbsp;=&nbsp;<span class="hljs-keyword">await</span>&nbsp;serverApp(context);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;appContent&nbsp;=&nbsp;<span class="hljs-keyword">await</span>&nbsp;renderToString(app,&nbsp;context);
+&nbsp;&nbsp;&nbsp;&nbsp;context.body&nbsp;=&nbsp;templateHTML.replace(<span class="hljs-string">"&lt;div&nbsp;id=app&gt;&lt;/div&gt;"</span>,&nbsp;<span class="hljs-string">`&lt;div&nbsp;id=app&nbsp;data-server-rendered="true"&gt;<span class="hljs-subst">${appContent}</span>&lt;/div&gt;`</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">await</span>&nbsp;next();
+})
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">`
+&nbsp;&nbsp;You&nbsp;can&nbsp;navigate&nbsp;to&nbsp;http://localhost:8080
+`</span>);
+server.listen(<span class="hljs-number">8080</span>);
+</pre><p>我们手动引入renderToString方法，这个方法就是Vue3的SSR关键——它在服务端生成整个html字符串，即DOM结构。服务端渲染的含义就是由服务端生成DOM结构。当然该方法返回的并不是一个完整的html，你可以打印结果看看，它只会包含id为app内部的部分。这并不奇怪，我们的Vue实例最后会挂载在app下，所以自然渲染包含内部部分。在生成字符串后，我们通过读入模板html，替换id=app的div部分为渲染内容，再将替换完的html发送出去即可。</p><p>从这里开始，Vue3的服务端渲染和Vue2的服务端渲染就开始有诸多不同了。在Vue2.x中，一切都是处理好的，可以利用vue-server-renderer的createBundleRenderer方法，传入模板、clientMainifest，将会自动生成完备的html格式发送，支持preload和prefetch、CSS注入等诸多特性。但是在Vue3当前阶段不支持bundleRenderer：</p><p><img src="https://www.im6767.top/articlePlates/1606627706875.png"></p><p>当然未来肯定会有人做bundleRenderer，只是现阶段没有。所以我们必须手动处理一些bandleRenderer为我们做的事情，这在下面的一些说明中也会提到。在服务端代码构建时，还有一个要注意的是，当路径传入时，我们能够正确得到渲染字符串，但是当资源请求（JS，CSS，image等）被服务器响应时，大概率会报404。我们需要对静态资源做出相应的处理。这里使用了koa-static，在匹配到静态资源后将会返回静态资源。此时，我们关于服务端的代码构建基本已经结束了。不过，服务端代码的执行还要建立在合适的打包构建之后，关于打包构建的注意事项将在后面提到。</p><h2>数据预取与处理</h2><p>经过上面的构建，所有静态部分的内容已经足以展示了，但是这明显不够。在服务端渲染方面，有两个问题必须面对：如何处理数据的获取？页面发送至客户端之后，客户端如何建立起同样地状态？举个实际的例子来讲：本小站进入首页展示的是文章列表，当客户端渲染时，整个过程是：进入页面，加载指示器显示(loading状态)，接口获取数据，加载指示器隐藏（移除loading状态），展示数据。但是在服务端渲染，整个过程就变成了：解析首页组件，获取数据，得到模板字符串，发送至客户端，客户端展示。更确切地，我们应该将整个SSR过程这样看待：客户端进行客户端加载，然后托管服务端渲染的部分。指南在数据处理推荐使用vuex。</p><p>还记得实例状态污染吗？同样要给状态部分构建一个工厂函数。这里有一个注意点：使用Vue3，你可能会用Composition API，Composition API中要获取到vuex的相关状态你必须制定key：</p><p><img src="https://www.im6767.top/articlePlates/1606630375569.png"></p><p>这其实很简单：</p><pre class="ql-syntax" spellcheck="false">//<span class="hljs-type">Vuex</span>.store.js
+//暴露出工厂方法和一个key值
+<span class="hljs-keyword">export</span>&nbsp;<span class="hljs-keyword">const</span>&nbsp;key:<span class="hljs-type">InjectionKey</span>&lt;<span class="hljs-type">Store</span>&lt;<span class="hljs-type">State</span>&gt;&gt;&nbsp;=&nbsp;<span class="hljs-type">Symbol</span>();
+<span class="hljs-keyword">export</span>&nbsp;function&nbsp;storeFactory&nbsp;():<span class="hljs-type">Store</span>&lt;<span class="hljs-type">State</span>&gt;&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;createStore&lt;<span class="hljs-type">State</span>&gt;(<span class="hljs-meta">{......}</span>)﻿
+}
+
+//client.main.js <span class="hljs-type">OR</span> server.main.js
+app.use(store,&nbsp;key);
+
+//在你使用<span class="hljs-type">Composition</span> <span class="hljs-type">API</span>的组件中
+<span class="hljs-keyword">import</span>&nbsp;{&nbsp;key&nbsp;}&nbsp;<span class="hljs-keyword">from</span>&nbsp;<span class="hljs-string">"../store/api.store"</span>;
+&nbsp;<span class="hljs-keyword">export</span>&nbsp;default&nbsp;defineComponent({
+    setup(props,&nbsp;context)&nbsp;{
+    <span class="hljs-keyword">const</span>&nbsp;store&nbsp;=&nbsp;useStore(key);
+  }
+})
+</pre><p>没有key值，直接使用useStore()将永远获取到的是undefined。这点我还是比较有疑虑的，为什么是获取不到。个人感觉应该"不包含key值时获取到所有的store，包含key值获取到指定store"，当然纯属个人浅见。</p><p>通过以上我们已经成功引入并使用了vuex，接下来就要利用vuex进行数据改造了。在指南中还使用了一个小工具：vue-router-<span class="hljs-keyword">sync</span>。这个工具的作用就是将vuex绑定在vue-router上，通过获取到vue-router就能够获取到vuex。通过这样的绑定，可以在服务端很容易地完成一些数据预取的参数对应工作。</p><pre class="ql-syntax" spellcheck="false">import { sync } <span class="hljs-keyword">from</span> 'vuex-router-sync'
+// 同步路由状态(route <span class="hljs-keyword">state</span>)到 store
+sync(store, router)
+</pre><p>然后按照指南描述的那样，开始在要进行数据存取的组件里编写对应地方法。</p><pre class="ql-syntax" spellcheck="false">export<span class="hljs-built_in">&nbsp;default&nbsp;</span>defineComponent({
+&nbsp;&nbsp;&nbsp;&nbsp;name:<span class="hljs-string">'articleList'</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;asyncData({store,&nbsp;route}:&nbsp;AsyncProp){
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;return&nbsp;store.dispatch(<span class="hljs-string">'fetchArticleList'</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;}
+)
+</pre><p>上面是一个Composition API的示例编写方法，总之的一个原则就是：将原先页面的数据获取逻辑移入vuex，编写对应地方法，所有需要进行数据获取的地方不再单独调用，而是统一操作vuex的状态，达到同步的目的。数据预取和状态同步是整个SSR过程中最繁琐的部分，特别是原有代码的改造，需要重新设计逻辑，但是并不具有太大的难度，而且很容易理解原理，参考指南进行就可以，这里针对Vue3和指南不同的部分进行一些讲说明：</p><p><img src="https://www.im6767.top/articlePlates/1606631568247.png"></p><p>数据预取部分有三个注意点：</p><ul><li>匹配路由组件的时候，不再是getMatchedComponents，而是新的方法router.currentRoute.value.matched.flatMap，这是vue-router-next规定的。</li><li>如上图代码，指南中调用asyncData时，传入route参数使用的是router.currentRoute，在Vue3中这样写获取不到参数，而是应该是router.currentRoute.value。你可以打印下router.currentRoute，发现它和vue3使用ref()定义的量的格式是一样的，所以请务必.value来获取值(这个问题曾经浪费了我大量时间来找问题)。</li><li>关于context.state = store.state部分，注释说明状态将自动序列化为window.__INITIAL_STATE__注入HTML，这个是bundleRenderer完成的，并不是Vue原生支持。而我们上面提到过，Vue3目前不支持bundleRenderer，所以这部分要手动处理，这个下文会提到，这部分的处理非常简单。</li></ul><p>在注意到上面的事项后，对应Vue3的相关代码构建类似这样：</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-keyword">export</span>&nbsp;<span class="hljs-keyword">default</span>&nbsp;<span class="hljs-keyword">async</span>&nbsp;(context:&nbsp;<span class="hljs-built_in">any</span>)&nbsp;=&gt;{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;app&nbsp;=&nbsp;createSSRApp(App);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;router&nbsp;=&nbsp;routerFactory(<span class="hljs-literal">true</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;store:&nbsp;<span class="hljs-built_in">any</span>&nbsp;=&nbsp;storeFactory();
+&nbsp;&nbsp;&nbsp;&nbsp;sync(store,&nbsp;router);
+&nbsp;&nbsp;&nbsp;&nbsp;app.use(router);
+&nbsp;&nbsp;&nbsp;&nbsp;app.use(store,&nbsp;key);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">await</span>&nbsp;router.push(context.url);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">await</span>&nbsp;router.isReady();
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(router.currentRoute.value.matched.length&nbsp;===&nbsp;<span class="hljs-number">0</span>)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;context.throw(<span class="hljs-number">404</span>,&nbsp;<span class="hljs-string">'Not&nbsp;Found'</span>)
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;matchedComponents&nbsp;=&nbsp;router.currentRoute.value.matched.flatMap(<span class="hljs-function"><span class="hljs-params">record</span>&nbsp;=&gt;</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-built_in">Object</span>.values(record.components)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;)
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">try</span>&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">await</span>&nbsp;<span class="hljs-built_in">Promise</span>.all(matchedComponents.map(<span class="hljs-function">(<span class="hljs-params">component:<span class="hljs-built_in">any</span></span>)&nbsp;=&gt;</span>&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(component.asyncData)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;component.asyncData({
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;store,&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;route:&nbsp;router.currentRoute.value
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;})
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}))
+&nbsp;&nbsp;&nbsp;&nbsp;}&nbsp;<span class="hljs-keyword">catch</span>(error)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-built_in">console</span>.log(error)
+&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;context.state&nbsp;=&nbsp;store.state;
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;app;
+}
+</pre><p>基本一致，只是针对Vue的变化做了部分处理。</p><p>既然提到了自动序列化这个问题，我们不妨直接说完。vue SSR服务端和客户端状态如何同步的呢？关键就是这个window.__INITIAL_STATE__部分。当你使用vue2.x进行服务端渲染时，会在HTML中包含这样的字符串：</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-tag">&lt;<span class="hljs-name">script</span>&gt;</span><span class="hljs-built_in">window</span>.__INITIAL_STATE__={<span class="hljs-string">"key"</span>:<span class="hljs-string">"xxx"</span>, <span class="hljs-string">"value"</span>:<span class="hljs-string">"xxx"</span>}<span class="hljs-tag">&lt;/<span class="hljs-name">script</span>&gt;</span>
+</pre><p>试想﻿这样的代码被客户端构建后会变成什么？当然是在window这个全局对象上挂载__INITIAL_STATE__这个对象。然后在client.main.ts中这样：</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-keyword">if</span>&nbsp;(<span class="hljs-keyword">window</span>.__INITIAL_STATE__)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;store.replaceState(<span class="hljs-keyword">window</span>.__INITIAL_STATE__);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//代码强迫症,&nbsp;为了保持生成的html整洁,&nbsp;在数据同步之后删除script标签</span>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;<span class="hljs-variable">$initScript</span>&nbsp;=&nbsp;document.querySelector(<span class="hljs-string">"#init-script"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(<span class="hljs-variable">$initScript</span>)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-variable">$initScript</span>.remove();
+&nbsp;&nbsp;&nbsp;&nbsp;}
+}
+</pre><p>检测到对象存在，客户端就直接将状态同步。就是这么简单。所以我们要做的就是生成上面提到的字符串，这也就是bundleRenderer所做的一部分工作。根据上面的代码，我们将store.state值赋给了context.state，所以在服务端的代码中，我们这样：</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-keyword">const</span>&nbsp;createScriptStore&nbsp;=&nbsp;<span class="hljs-function"><span class="hljs-keyword">function</span>&nbsp;(<span class="hljs-params">store</span>)&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;scriptString&nbsp;=&nbsp;<span class="hljs-string">`&lt;script&nbsp;id&nbsp;=&nbsp;"init-script"&gt;window.__INITIAL_STATE__&nbsp;=&nbsp;<span class="hljs-subst">${<span class="hljs-built_in">JSON</span>.stringify(store)}</span>&lt;/script&gt;`</span>;
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;scriptString;
+}
+server.use(<span class="hljs-keyword">async</span>&nbsp;(context,&nbsp;next)=&gt;{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;app&nbsp;=&nbsp;<span class="hljs-keyword">await</span>&nbsp;serverApp(context);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;appContent&nbsp;=&nbsp;<span class="hljs-keyword">await</span>&nbsp;renderToString(app,&nbsp;context);
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">const</span>&nbsp;storeString&nbsp;=&nbsp;createScriptStore(context.state);
+&nbsp;&nbsp;&nbsp;&nbsp;context.body&nbsp;=&nbsp;templateHTML.replace(<span class="hljs-string">"&lt;div&nbsp;id=app&gt;&lt;/div&gt;"</span>,&nbsp;(<span class="hljs-string">`&lt;div&nbsp;id=app&nbsp;data-server-rendered="true"&gt;<span class="hljs-subst">${appContent}</span>&lt;/div&gt;`</span>&nbsp;+&nbsp;storeString));
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">await</span>&nbsp;next();
+})
+</pre><p>从context.state读取到state，然后处理成script包裹的标签，再拼接在html模板的指定位置就好。</p><p>我是一个有点点代码洁癖的人，当这样的代码被客户端渲染后，势必会有一个script标签，里面有一串长长的代码。我们经常会从控制台查看代码，这样的一个script标签我非常不喜欢。处理它，就像上面代码那样，给script一个id，然后状态同步完直接remove掉，就舒服多了。</p><p>经过数据的预取和状态的同步，SSR改造就基本已经完成了。剩下的就是一些逻辑调整和代码修改。客户端代码预取就按照指南中的步骤，选取合适的方案处理就行，没有什么区别。在整个SSR改造的过程中，确实是数据预取花费的改造时间最多，改造过程中出了很多问题，也更为深入的去了解了一些vue和相关组件的实现，虽然没有窥得全貌，但也是收获颇丰。</p><p>诶嘿，说到这里，不妨给大家推荐一个知乎老哥的帖子，一种更简单地数据获取的方法，asyncData这个方法确实会有一点点繁琐，而这位老哥的方法更具有优势。如果你感兴趣，可以<a href="https://zhuanlan.zhihu.com/p/74248464" rel="noopener noreferrer" target="_blank">点击这里</a>查看。</p><p>顺便再啰嗦几句：如果你查找过一些Vue3的特性文章，你应该看到过这样的说法：Vue3中不需要vuex了，因为inject/和provide提供了类似的功能。在SSR之前，我的项目确实不包含Vuex，因为太简单了，根本不涉及复杂的状态交互，所以inject/provide确实是完美的解决了我的需求。但是由于SSR指南中相关的操作都是基于vuex的，所以为了少走弯路，这次改造我也是引入了vuex。用inject/provide可以吗？当然可以，但是我没有尝试过。</p><h2>构建工具配置</h2><p>Vue3的生态中，带来了更快的vite工具，但是由于我这个项目本身属于改造项目，所以依旧是vue-cli，也就是webpack生态的。关于vite工具下的SSR在github上有一些示例demo，如果你是基于vite构建的，那么下文的内容可能帮不了你，你应该去寻找这些demo来查看如何配置。</p><p>在本小结的内容中，你需要具备系统的webpack知识，了解一些配置的实际作用，这里我贴出相关配置，然后针对一些关键点进行说明：</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-keyword">const</span>&nbsp;ManifestPlugin&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">"webpack-manifest-plugin"</span>);
+<span class="hljs-keyword">const</span>&nbsp;nodeExternals&nbsp;=&nbsp;<span class="hljs-built_in">require</span>(<span class="hljs-string">"webpack-node-externals"</span>);
+<span class="hljs-keyword">const</span>&nbsp;RUN_ENV&nbsp;=&nbsp;process.env.SSR&nbsp;?&nbsp;<span class="hljs-string">"server"</span>&nbsp;:<span class="hljs-string">"client"</span>;
+<span class="hljs-keyword">const</span>&nbsp;TARGET&nbsp;=&nbsp;process.env.SSR&nbsp;?&nbsp;<span class="hljs-string">"node"</span>&nbsp;:<span class="hljs-string">"web"</span>;
+<span class="hljs-keyword">const</span>&nbsp;LIBRARY_TARGET&nbsp;=&nbsp;process.env.SSR&nbsp;?&nbsp;<span class="hljs-string">"commonjs2"</span>&nbsp;:&nbsp;<span class="hljs-literal">undefined</span>;
+<span class="hljs-keyword">const</span>&nbsp;CSS_EXTRACT&nbsp;=&nbsp;process.env.SSR&nbsp;?&nbsp;<span class="hljs-literal">false</span>&nbsp;:&nbsp;<span class="hljs-literal">true</span>;
+<span class="hljs-built_in">module</span>.exports&nbsp;=&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">outputDir</span>:&nbsp;<span class="hljs-string">`./dist/<span class="hljs-subst">${RUN_ENV}</span>`</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">lintOnSave</span>:&nbsp;<span class="hljs-literal">false</span>,
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">chainWebpack</span>:&nbsp;<span class="hljs-function"><span class="hljs-params">config</span>&nbsp;=&gt;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(!process.env.SSR)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.devServer.disableHostCheck(<span class="hljs-literal">true</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//client和server通用的构建配置</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.entry(<span class="hljs-string">"app"</span>)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.clear()
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.add(<span class="hljs-string">`./src/main.<span class="hljs-subst">${RUN_ENV}</span>.ts`</span>);
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.target(TARGET);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.output.libraryTarget(LIBRARY_TARGET);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.plugin(<span class="hljs-string">"manifest"</span>)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.use(<span class="hljs-keyword">new</span>&nbsp;ManifestPlugin({&nbsp;<span class="hljs-attr">fileName</span>:&nbsp;<span class="hljs-string">"ssr-manifest.json"</span>&nbsp;}));
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-comment">//仅在server中使用的配置项</span>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">if</span>&nbsp;(process.env.SSR)&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.externals(nodeExternals({&nbsp;<span class="hljs-attr">allowlist</span>:&nbsp;<span class="hljs-regexp">/\.(css|vue)$/</span>&nbsp;}));
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.optimization.splitChunks(<span class="hljs-literal">false</span>).minimize(<span class="hljs-literal">false</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.plugins.delete(<span class="hljs-string">"hmr"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.plugins.delete(<span class="hljs-string">"progress"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.plugins.delete(<span class="hljs-string">"friendly-errors"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.plugins.delete(<span class="hljs-string">"preload"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.plugins.delete(<span class="hljs-string">"prefetch"</span>);
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;config.plugin(<span class="hljs-string">'html'</span>)
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;.tap(<span class="hljs-function"><span class="hljs-params">args</span>&nbsp;=&gt;</span>&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;args[<span class="hljs-number">0</span>].title&nbsp;=&nbsp;<span class="hljs-string">"六七的小屋"</span>;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;args;
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;})
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-keyword">return</span>&nbsp;{&nbsp;<span class="hljs-attr">resolve</span>:&nbsp;{&nbsp;<span class="hljs-attr">mainFields</span>:&nbsp;[<span class="hljs-string">'main'</span>,&nbsp;<span class="hljs-string">'module'</span>]&nbsp;}&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;},
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">css</span>:&nbsp;{
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-attr">extract</span>:&nbsp;CSS_EXTRACT
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}
+&nbsp;&nbsp;&nbsp;&nbsp;}
+</pre><p>既然是同构项目，我们打包肯定要区分客户端环境和服务端环境，不同的环境有不同的打包处理的入口。这里定义一些常量用于不同环境区分。当然你也可以为不同的环境(client，server)建立不同的config文件，最后通过webpack的merge合并起来，这完全由你决定。</p><p>在服务端构建的过程中，我们的libraryTarget要使用commonjs2规范。这里为了方便调试，服务端代码构建关闭了代码压缩，事实上服务端进行代码压缩的必要性也不是很足。关于preload和prefetch的去除仁者见仁智者见智，需不需要都可以，我这里关闭了。</p><p>关于css的提取这个问题，是比较坑的一个问题。vue-cli4中css的提取使用的是mini-css-extract-plugin，但是这个插件对服务端渲染很不友好。它内部插入css样式使用的Document上的方法，由于服务端渲染没有浏览器的对象，会导致报错。关闭它呢，css将不会被单独提出文件，而是包含在js中，然后插入到style标签之间。关于这个问题网上并没有明确的解决方案，大部分人都是直接关闭css的提取。在官方git库下面讨论有几种方案：使用null-style（我没有成功），使用css-loader/locals（我没有成功），使用extract-text-webpack-plugin（我还是没有成功）。这个我也非常好奇，SSR是一个比较常见的需求，但是这个非常常用、被vue-cli纳入默认处理的插件居然不支持。事实上最好的解决方案是，建立一个垫片库，为服务端和客户端构建通用的window和document对象，这样就不至于会报错，等有机会不妨去实现下。</p><p>那这里这个问题怎么办呢？事实上Vue3大可不必被这个问题困扰。因为Vue3本身不支持bundleRenderer，所以SSR返回的只是组模板字符串，内部不包含任何样式，所以CSS提取这个功能对于Vue3的服务端构建没有任何意义，所以就像上面的代码，我们在服务端构建时关闭，客户端构建时开启即可。关于CSS的处理交由客户端来完成。</p><p>到这里，一个完整的Vue SSR基本就结束了。接下来就是打包、运行、调试和解决问题。有人说SSR差不多是Vue学习的最后阶段，但事实上也是具有略微深入的体系了解就可以。本站SSR主要为了两个页面，一个是首页，一个是文章页，旨在带来更好的体验。一个稳定、合适的SSR项目其实还有很多要去做，特别是用于大型项目中，不得不去考虑并发，考虑服务器压力等等，不过这些目前离本站还很遥远，或许这些经验，对于个人来讲，也更多的要寄希望于工作时的一些项目积累。</p><h2>其它问题</h2><p>尽管上面已经提到了一些SSR改造过程中的问题，但是还是不够。这里单独引用一个章节，来记录一些SSR过程中的问题，有一些是到目前为止我还没有解决的。当然以后肯定会去解决，毕竟SSR改造也还没有完成多久。</p><h4>一瞬间的样式错乱</h4><p>当你的SSR改造完成并运行时，不妨盯着你的界面刷新看看，你可能会发现一个现象：有那么一瞬间，你的页面样式是错乱的，然后很快就恢复。尽管这个问题有时候很难察觉，但是略带完美主义倾向的我还是比较厌恶这个一闪而过的现象。为什么会这样？其实这个很容易解释：在客户端代码中，DOM的构建是JS执行时完成的，整个页面加载的过程类似这样：id为app的标签内为空——加载JS——加载样式——DOM构建并展示。而服务端渲染下，过程变为了：返回的HTML已经具有完整的DOM结构——加载JS——加载样式。DOM结构先于样式加载，所以会出现样式错乱的情况。那么解决这个 问题的方法是什么？我们能想到的当然是让样式先加载，但是做起来没那么容易。当CSS提取时，为了较小体积CSS会被分成很多个chunk，然后按需加载，所以势必要由JS来决定加载哪一个CSS，此时无法保证CSS先加载，那么需要将所有CSS打包进入一个文件，然后在HTML页head中引入，这样才能保证CSS优先获取并加载，分包与合包之间有一个取舍关系，而且你要单独处理CSS合包才行。</p><p>不过笔者使用了一个自欺欺人的做法：让id为app的div初始时样式visibility值为hidden，然后再mounted钩子中再改为visible。是的，保证已经挂载完毕，DOM创建后再展示出来就可以，如果你也遇到了这个问题，不妨试试这个方法是不是满足你的要求。</p><h4>服务端打包路径不对应</h4><p>这个问题是目前还遗留的一个问题。</p><p><img src="https://www.im6767.top/articlePlates/1606637426145.png"></p><p>当我执行服务端打包后，生成的js目录是这样的，即所有的js都包含在js文件夹目录下，其中第一个，也就是app.xxx.js是入口文件，但是当运行时，会报错：./js/chunk.xxxx/js没有找到。追踪报错行，会发现入口文件中的加载路径是这样的：</p><p><img src="https://www.im6767.top/articlePlates/1606637615065.png"></p><p>所有的chunk查找都不是基于当前目录，而是指向了./js/chunk.xxx.js。手动修正为./之后正常。这应该是打包路径配置的问题，或者目录结构组织的问题，但是目前还没有确定，暂时的解决方案就是每次打包完手动改下，不过真的很蠢。这个高优先级的问题将会在近期被解决。</p><h4>注意keep-alive</h4><p>使用Vue你肯定见过keep-alive，可以用来缓存组件，但是在Vue3，确切说是Vue3.0.2版本中，使用keep-alive服务端渲染将会报错。解决方案：去掉keep-alive，或者说服务端打包时去掉keep-alive。这个问题我觉得是Vue的问题，所以我特别指明Vue3.0.2版本是有问题的，可能会在未来修复。既然没法使用，跳过就可以了嘛。遇到这个问题我就在想，这不就是个条件编译的需求吗？我可以把keep-alive用条件编译注释，客户端构建就包含该语句，服务端构建就无视该语句，然后并没有找到适合Vue的条件编译工具，等有机会自己撸一个。</p><h4>history模式与a标签跳转</h4><p>请牢记，服务端渲染需要向服务端发送请求，才能够获取页面。如果你是用的是history模式，地址栏地址虽然发生了改变，但事实上不会去服务器请求对应地数据，相当于被客户端托管后，就变成了客户端渲染的App，所以如果你需要跳转的页面是需要服务端渲染的，请直接用a标签加上链接的形式请求。（打开控制台看看，到底有没有返回完整的html页）。</p><h4>请求路径</h4><p>由于我有一个完整的服务端在远程服务器上，所以本地没有运行服务。在服务端渲染的服务中，会发现这样一个问题：服务器会提示类似“.0.0.1/80 connect failed”之类的错误，这是因为在客户端构建中，你的devserver会进行请求转发，但是服务端没有，请求会被默认指向本地的80端口，如果你的80端口没有服务，就会报错。</p><p>解决方案引入http-proxy-middleware中间件在服务端也创建一个转发，把请求转发到该去的地址。但是！！！我安装了http-proxy-middleware后发现整个项目跑不起来了，查看报错后发现，vue-cli内部也使用了这个中间件，但是版本是1.0以下的，如果你安装了新的版本，由于写法的改变，会导致报错，这个比较坑，不过好在也有解决方案，而且更简单。项目中使用的是axios做请求，所以不妨在axios的拦截器中做点手脚，如果是客户端就默认逻辑，如果是服务端就拼写成完完整整带IP端口形式的地址。</p><h2>结束</h2><p>本文到这里差不多就要结束了。这次的服务端改造还是花了不少精力和时间的，特别是有几个晚上被几个恼人的问题弄得心烦意乱的时候。本来是想学学SSR，结果SSR过程中又引出了更多的问题，关于Vue，关于webpack，关于各种plugin和loader。罗翔老师的关于读书的一篇文章里面说， 学习事实上是一个悖论，因为你在求知的路上，愈发感觉到自己无知。这段时间也渐渐进入了一阵学习状态期，大多数时间都放在前端，特别是JS上，最近几天突然感觉到厌倦，多少感觉到有点JS疲劳了。可能是时候放下JS，从深度递归中走出来，走向广度递归一段时间了。</p>

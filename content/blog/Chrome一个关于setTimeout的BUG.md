@@ -1,0 +1,22 @@
+---
+title: 'Chrome一个关于setTimeout的BUG'
+summary: '在工作中，发现一段原本正常工作的代码执行顺序变得奇怪，和自己对于代码的理解认知相冲突。在排除一切代码逻辑错误的可能性后，不得不让人怀疑，这是一个Chrome浏览器的BUG。'
+date: 2021-09-16
+---
+<h3>起因</h3><p>问题是从浏览器版本升级开始的。由于公司使用的是基于chromium内核构建的客户端程序，所以一直以来使用的内核都是固定的。随着开发的继续，之前的版本内核显然显得有点古老，为了适应新的功能，进行了一次版本升级，将内核版本更新到9x版本。但是更新后发现，某些代码运行不正常——在之前的版本内核是正常的。</p><h3>问题</h3><p>原本的代码构建相当复杂，里面包含很多的setTimeout，在经过反复的问题复现后，我们得到了一个简化版本的测试代码：</p><pre class="ql-syntax" spellcheck="false"><span class="hljs-built_in">console</span>.log(<span class="hljs-string">"before1"</span>);
+setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>&nbsp;()&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"start"</span>)
+},&nbsp;<span class="hljs-number">1</span>)
+
+
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"set&nbsp;0"</span>);
+setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>&nbsp;()&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"0"</span>)
+},&nbsp;<span class="hljs-number">0</span>);
+
+
+<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"set&nbsp;1"</span>);
+setTimeout(<span class="hljs-function"><span class="hljs-keyword">function</span>&nbsp;()&nbsp;</span>{
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="hljs-built_in">console</span>.log(<span class="hljs-string">"1"</span>);
+},&nbsp;<span class="hljs-number">1</span>);
+</pre><p>我们从理论上分析一下正确的结果：</p><p>同步代码执行，异步代码再执行，所以结果是：</p><blockquote>before1</blockquote><blockquote>set 0</blockquote><blockquote>set 1</blockquote><blockquote>0</blockquote><blockquote>start</blockquote><blockquote>1</blockquote><p>前三个执行顺序没有异议，执行异步代码时，定时为0的先执行，start和1的console语句代码由于延时都为1，所以依次执行，故顺序为0 start 1。</p><p>当然这不是唯一的答案，顺序还可能是：</p><blockquote>before1</blockquote><blockquote>set 0</blockquote><blockquote>set 1</blockquote><blockquote>start</blockquote><blockquote>0</blockquote><blockquote>1</blockquote><p>这个也很容易理解：如果同步代码执行时间略长，导致三个定时器任务都已经到达执行时间，那么就按照顺序执行，也就是start 0 1。</p><p>如果你对以上结果不理解，那么说明关于setTimeout，你的认识非常有限。</p><p>如果你使用的是Chrome浏览器，你完全可以运行这段代码试试。你可以写入html文件，然后不断地刷新页面，观察输出结果，你会发现，输出结果可能是不同的，如下两张图所示：</p><p><img src="https://www.im6767.top/articlePlates/1631800833845.png"></p><p><img src="https://www.im6767.top/articlePlates/1631800848083.png"></p><p>可以看到，出现了start 0 1和start 1 0两种情况。</p><p>为什么会出现1 0？这种情况应当永远不会发生：我们知道，从事件循环来讲，任务是一个队列结构，保持着严格的先进先出，如果二者在异步任务执行时都已经到达执行时间，那么按照先进先出的原则，0肯定先于1进行打印。如果同步任务执行的很快，执行异步任务时0已经到达时间，而1仍然没有到达时间，0肯定也先于1进行打印。1 0的顺序是永远不应该发生的，但是很显然，它发生了。</p><h3>排查</h3><p>这个问题的排查显得有点无从下手。开始时我以为是事件循环并不完全按照队列的方式执行，因为很显然后进入队列的代码先执行了，于是乎翻看了标准文档，发现文档中明确指明，事件是按照队列先进先出执行的，所以是这里的问题可能性比较小。</p><p>然后想到当setTimeout嵌套过深的时候（5层），如果时间小于4ms，会将时间置为4ms，可能是因为这个影响了代码执行时间，但是得到以上的测试代码后，这个可能性就被排除了：我们的测试代码汇总没有任何的定时器嵌套。</p><p>问题变得很棘手。</p><p>排除我所能想到的所有可能之后，不得不开始怀疑这可能是一个浏览器内核的问题。我意识到在旧版的内核中，代码始终工作正常，但在新版本中出现了问题，所以肯定是从某个版本开始，出现了这个问题。通过不断地寻找，尝试各个版本的chrome，最终发现86版本之前，运行结果总是正常的，87版本开始就会出现问题，所以基本可以确定，这基本是一个浏览器问题。</p><h3>寻找答案</h3><p>发现这可能是一个浏览器的问题后，我尝试通过Chrome官方渠道寻找答案。在bug提交的相关网站，我进行了问题描述与提交，并且上传了自己的测试用例：</p><p><img src="https://www.im6767.top/articlePlates/1631802681208.jpg"></p><p>请无视我的渣英语，语言的组织还是花费了不少时间。</p><p>让我感到意外的是，发出贴三分钟后，就有开发人员对问题进行了分类，将我的提出的问题贴上了对应地标签。</p><h3>我想试试</h3><p>笔者有一个90版本的客户端与其源码，有了之前排查mouseenter和mouseleave事件问题的经验，我想尝试自己从源码中寻找答案。打开并且运行项目，进行代码debug追踪，但是最终并没有得到问题所在。一方面是chrome的代码体系太过庞大了，再者笔者的C++能力实在有限，面对这些代码也感到无能为力。但是在这个过程中，了解到了setTimeout的内部实现原理和一些实现细节，例如嵌套过深的4ms延时处理，事件循环的内部处理（一个没有跳出条件的for循环不断地处理任务），setTimeout添加的函数是如何被解析执行的等。虽然没有得到自己想要的答案，但仍旧有一些意料之外的收获。</p><h3>得到答案</h3><p>幸运的是，我很快就得到了官方人员的正式回复：</p><p><img src="https://www.im6767.top/articlePlates/1631876894387.png"></p><p>哈，这确实是一个问题，已经被采纳了，相关开发人员开始着手解决了，期待新的版本将其修复。</p><p><br></p><p><strong>2021-09-18更新</strong></p><p>又有新的开发者进行了回复，对问题进行了确认，看来影响面还有一点点大。告知了我是因为修复其他问题引起的，并给出了对应问题的id，简要说明了一下他的测试用例为什么没有覆盖到这种情况。</p><p><img src="https://www.im6767.top/articlePlates/1631953476614.png"></p><p><img src="https://www.im6767.top/articlePlates/1631953530455.png"></p><p>我觉得这个工作效率真的是很高了，比较羡慕这种开发节奏和状态，重视每个问题，而且有耐心说明问题的缘由。</p><p><br></p><p><strong>2021-11-03更新</strong></p><p>已经修复并进入测试阶段了，在97版本的发布中将会更新此问题</p><p><img src="https://www.im6767.top/articlePlates/1635925547210.png"></p><h3>恼人的问题</h3><p>这是一个相当恼人的问题，因为当我们的代码建立在别人的工具上(Chrome)时，这意味着你必须无条件的信任底层构建者的代码，如果其中某一个环节出现问题，将会对自己造成很大的麻烦。一开始我始终认为我们的代码是有问题的，于是不断地排查和重试问题，直到自己排除了知识范围内的所有情况。这个问题花费了大量时间，才得到了正确答案。有的时候我完全对此表示怀疑：这真的值得吗？为了一个看起来并不那么"重要"的问题，浪费了自己大量的私人时间。直到问题被修复后，这一切的努力似乎都又没有了意义。</p>
