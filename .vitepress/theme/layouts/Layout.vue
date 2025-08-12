@@ -29,3 +29,11 @@ const isNotFound = computed(() => get(route, 'data.isNotFound', false))
         </div>
     </div>
 </template>
+
+<style lang="scss">
+#main {
+& > div {
+    @apply h-full w-full;
+}
+}
+</style>
