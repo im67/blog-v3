@@ -21,7 +21,7 @@ const { page } = useData();
         <div v-if="$slots['sidebar']" class="hidden lg:block">
             <slot name="sidebar"></slot>
         </div>
-        <div class="flex flex-col grow overflow-hidden">
+        <div class="flex flex-col grow overflow-hidden dd">
             <slot name="header" v-if="!page.isNotFound"></slot>
             <slot name="main">
                 <div v-if="page.isNotFound" class="h-full w-full wwwwwww">
