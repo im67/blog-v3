@@ -24,7 +24,7 @@ const isNotFound = computed(() => get(route, 'data.isNotFound', false))
         <div class="flex flex-col grow overflow-hidden">
             <slot name="header" v-if="!isNotFound"></slot>
             <slot name="main">
-                <component :is="CurrentPage" class="grow overflow-auto" id="main" :key="CurrentPage.name" />
+                <component :is="CurrentPage" class="grow overflow-auto" id="main" />
             </slot>
         </div>
     </div>
