@@ -33,7 +33,8 @@ const isNotFound = computed(() => get(route, 'data.isNotFound', false))
 <style lang="scss">
 #main {
 & > div {
-    @apply h-full w-full;
+    height: 100%;
+    width: 100%;
 }
 }
 </style>
