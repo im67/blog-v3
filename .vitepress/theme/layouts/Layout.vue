@@ -1,8 +1,8 @@
 <script lang="ts" setup>
-import { useRoute } from 'vitepress';
-import { get } from 'lodash-es';
-import ListPage from './page/ListPage.vue'
-import BlogPage from './page/BlogPage.vue'
+import { useData, useRoute } from 'vitepress';
+import ListPage from './pages/ListPage.vue'
+import BlogPage from './pages/BlogPage.vue'
+import NotFoundPage from './pages/NotFound.vue';
 
 const route = useRoute()
 
@@ -12,7 +12,7 @@ const CurrentPage = computed(() => {
         : ListPage
 })
 
-const isNotFound = computed(() => get(route, 'data.isNotFound', false))
+const { page } = useData();
 
 </script>
 
@@ -22,19 +22,11 @@ const isNotFound = computed(() => get(route, 'data.isNotFound', false))
             <slot name="sidebar"></slot>
         </div>
         <div class="flex flex-col grow overflow-hidden">
-            <slot name="header" v-if="!isNotFound"></slot>
+            <slot name="header" v-if="!page.isNotFound"></slot>
             <slot name="main">
-                <component :is="CurrentPage" class="grow overflow-auto" id="main" />
+                <NotFoundPage v-if="page.isNotFound"/>
+                <component :is="CurrentPage" class="grow overflow-auto" id="main" v-else />
             </slot>
         </div>
     </div>
 </template>
-
-<style lang="scss">
-#main {
-& > div {
-    height: 100%;
-    width: 100%;
-}
-}
-</style>

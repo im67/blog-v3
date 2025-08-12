@@ -8,7 +8,6 @@ import HeaderMenu from './components/HeaderMenu.vue'
 import Layout from './layouts/Layout.vue'
 import HomePage from './components/HomePage.vue'
 import ArticleList from './components/ArticleList.vue'
-import NotFound from './NotFound.vue'
 
 import './style.css'
 
@@ -17,8 +16,7 @@ export default {
     sidebar: h(Sidebar),
     header: h(HeaderMenu)
   }),
-  NotFound,
-  enhanceApp({ app, router, siteData }) {
+  enhanceApp({ app }) {
     app.component('HomePage', HomePage);
     app.component('ArticleList', ArticleList)
   }
