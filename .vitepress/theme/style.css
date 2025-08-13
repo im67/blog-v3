@@ -108,9 +108,13 @@
 
 :root {
   @apply bg-gray-100 text-stone-600;
-
 }
 
+@media (max-width: theme(screens.md)) {
+    html {
+      font-size: 14px;
+    }
+  }
 
 
 @media (min-width: 640px) {
