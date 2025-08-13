@@ -94,18 +94,6 @@
  * Component: Home
  * -------------------------------------------------------------------------- */
 
-@font-face {
-  font-family: 'MaShanZheng-Regular';
-  src: url('../assets/MaShanZheng-Regular.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-}
-
-.header-menu {
-  font-family: 'MaShanZheng-Regular', sans-serif;
-}
-
-
 :root {
   @apply bg-gray-100 text-stone-600;
 }
