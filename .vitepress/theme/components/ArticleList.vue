@@ -69,7 +69,7 @@ const onSearch = (v) => {
 </script>
 
 <template>
-  <div ref="scroll">
+  <div class="min-h-full" ref="scroll">
     <div class="sticky top-11 search-shadow pt-1 bg-gray-100"></div>
     <div class="pt-3 sticky -top-1 bg-gray-100 px-6 box-border pb-2 z-[3]">
       <Suspense>
