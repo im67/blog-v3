@@ -5,6 +5,7 @@ import hljs from 'highlight.js'
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
+
   title: "im6767‘s blog",
   description: "im6767's blog project",
   ignoreDeadLinks: true,
@@ -20,14 +21,13 @@ export default defineConfig({
           options: {
             extractField(document, fieldName) {
               if (fieldName === 'title') {
-                return document.id.replace(/content\/blog\/(.+).html/g, (match, p1) => {
+                return document.id.replace(/content\/blog\/(.+).html/g, (_: unknown, p1: string) => {
                   return p1;
                 })
               }
               return document[fieldName];
             },
-            // tokenize: (string) => [string],
-            // processTerm: (term) => term
+            tokenize: (string) => string.split('')
           }
         }
       },

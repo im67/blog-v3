@@ -13,7 +13,7 @@ watch(y, (n) => {
 })
 
 onMounted(async () => {
-      await nextTick();
+  await nextTick();
   if (scrollY.value && $scroll.value) {
     y.value = scrollY.value;
   }
