@@ -69,9 +69,9 @@ const onSearch = (v) => {
 </script>
 
 <template>
-  <div class="min-h-full" ref="scroll">
+  <div ref="scroll">
     <div class="sticky top-11 search-shadow pt-1 bg-gray-100"></div>
-    <div class="pt-3 sticky -top-1 bg-gray-100 px-6 box-border pb-2 z-[3]">
+    <div class="pt-3 sticky top-0 bg-gray-100 px-6 box-border pb-2 z-[3]">
       <Suspense>
         <SearchBox @search="onSearch" />
       </Suspense>
@@ -100,7 +100,7 @@ const onSearch = (v) => {
           v-if="currentPage !== pageCount">下一页</button>
       </div>
     </div>
-    <div class="flex flex-col gap-4 items-center justify-center" style="height: calc(100% - 57px);" v-else>
+    <div class="grow flex flex-col gap-4 items-center justify-center absolute m-auto left-0 right-0 top-0 bottom-0" style="height: calc(100% - 57px);" v-else>
       <IconCactus :size="80" />
       <div class="font-bold">没有找到你要的内容</div>
     </div>
