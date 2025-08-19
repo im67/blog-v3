@@ -175,3 +175,7 @@ h5 {
     @apply pb-8;
   }
 }
+
+#main > div{
+  @apply h-full;
+}

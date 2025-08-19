@@ -24,7 +24,7 @@ const { page } = useData();
         <div class="flex flex-col grow overflow-hidden dd">
             <slot name="header" v-if="!page.isNotFound"></slot>
             <slot name="main">
-                <div v-if="page.isNotFound" class="h-full w-full wwwwwww">
+                <div v-if="page.isNotFound" class="h-full w-full">
                     <NotFoundPage />
                 </div>
                 <component :is="CurrentPage" class="grow overflow-auto" id="main" v-else />

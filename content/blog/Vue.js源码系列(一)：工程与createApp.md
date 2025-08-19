@@ -271,6 +271,8 @@ mount方法实际上是最关键的方法，其中包含了虚拟vNode，render�
 2. 调用render进行判断，是进行卸载还是进行渲染。
 3. 调用patch，进行dom的diff，渲染出页面。
 
+当完成createApp,调用.mount("#app")时, 就进入了mount方法。
+
 
 
 ## 结束

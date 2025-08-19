@@ -32,6 +32,9 @@ importers:
       lodash-es:
         specifier: ^4.17.21
         version: 4.17.21
+      minisearch:
+        specifier: ^7.1.2
+        version: 7.1.2
       tailwindcss:
         specifier: ^4.1.7
         version: 4.1.7

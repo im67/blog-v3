@@ -3,6 +3,7 @@ import { h } from 'vue'
 // component
 import Sidebar from './components/Sidebar.vue'
 import HeaderMenu from './components/HeaderMenu.vue'
+import SearchBox from './components/SearchBox.vue'
 
 // page
 import Layout from './layouts/Layout.vue'
@@ -19,5 +20,6 @@ export default {
   enhanceApp({ app }) {
     app.component('HomePage', HomePage);
     app.component('ArticleList', ArticleList)
+    app.component('SearchBox', SearchBox)
   }
 }

@@ -13,6 +13,26 @@ export default defineConfig({
     nav: [
       { text: 'Home', link: '/' }
     ],
+    search: {
+      provider: 'local',
+      options: {
+        miniSearch: {
+          options: {
+            extractField(document, fieldName) {
+              if (fieldName === 'title') {
+                return document.id.replace(/content\/blog\/(.+).html/g, (match, p1) => {
+                  return p1;
+                })
+              }
+              return document[fieldName];
+            },
+            // tokenize: (string) => [string],
+            // processTerm: (term) => term
+          }
+        }
+      },
+      
+    }
   },
   vite: {
     plugins: [

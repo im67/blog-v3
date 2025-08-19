@@ -1,18 +1,21 @@
 <script lang="ts" setup>
 import { useData, useRoute } from 'vitepress';
+import SearchBoxComp from './SearchBox.vue';
 
 const menu = [
   { label: '首页', path: '/' },
   { label: '博客', path: '/content/' }
 ]
+
 const route = useRoute();
 
 </script>
 
 <template>
-  <div class="flex items-center justify-between header-menu font-normal z-3">
-    <div class="grow-1 flex justify-around border-b-[1px] border-stone-300">
-      <h3 v-for="item of menu" class="cursor-pointer menu-item relative" :class="{ 'active': route.path === item.path }">
+  <div class="flex items-center justify-between header-menu font-normal z-3  border-b-[1px] border-stone-300">
+    <div class="grow-1 flex justify-around">
+      <h3 v-for="item of menu" class="cursor-pointer menu-item relative"
+        :class="{ 'active': route.path === item.path }">
         <a :href="item.path" class="inline-block py-3">{{ item.label }}</a>
       </h3>
     </div>
@@ -31,7 +34,8 @@ const route = useRoute();
   transition: all .3s ease;
 }
 
-.menu-item:hover::before, .active.menu-item::before {
+.menu-item:hover::before,
+.active.menu-item::before {
   width: 100%;
 }
 </style>
