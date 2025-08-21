@@ -177,5 +177,5 @@ h5 {
 }
 
 #main > div{
-  @apply h-full relative;
+  @apply h-full;
 }

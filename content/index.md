@@ -1,5 +1,4 @@
 ---
-home: true
 title: "列表"
 ---
 
