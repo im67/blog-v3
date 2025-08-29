@@ -175,7 +175,7 @@ pre,
   font-weight: bold;
 }
 
-[class^="language-"] {
+div[class^="language-"] {
   @apply flex flex-col;
 
   & > .lang {
